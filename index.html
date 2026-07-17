@@ -179,6 +179,17 @@
     font-family: inherit;
     font-size: 0.85rem;
   }
+  .name-field{
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.85rem;
+    width: 140px;
+    min-width: 0;
+  }
   .btn-primary, .btn-secondary{
     appearance:none;
     border:none;
@@ -568,6 +579,7 @@
           <li>Once connected, whoever's turn it is to place (the host goes first) puts the queen anywhere in the glowing top row or right column &mdash; this alternates every new game.</li>
           <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
           <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
+          <li>If someone else opens the link while a game is already full, they can choose to watch instead of playing.</li>
         </ol>
         <div id="reactionRow" class="reaction-row"></div>
         <div class="history-panel">
@@ -594,6 +606,7 @@
   const ROOM_PREFIX = 'ctq-';
   const REACTIONS = ['👍', '😮', '😅', '🎉', '😤'];
   const SESSION_KEY = 'ctq_session';
+  const NAME_KEY = 'ctq_player_name';
 
   let N = 16;
   let cellSize = 30;
@@ -603,6 +616,8 @@
   let currentPlayer = 1; // 1 or 2
   let placingPlayer = 1; // who places the queen this game — alternates each new game
   let selected = false;
+  let myName = '';
+  let playerNames = { 1: 'Player 1', 2: 'Player 2' };
   let moveHistory = [];
   let scores = { 1: 0, 2: 0 };
   let focusX = 0, focusY = 0;
@@ -647,6 +662,32 @@
   function computeCellSize(){
     const available = Math.min(window.innerWidth - 64, 560);
     return Math.max(16, Math.floor(available / N));
+  }
+
+  // ---------- Player names ----------
+
+  function getSavedName(){
+    try{ return localStorage.getItem(NAME_KEY) || ''; } catch(e){ return ''; }
+  }
+
+  function saveName(name){
+    try{ localStorage.setItem(NAME_KEY, name); } catch(e){}
+  }
+
+  function readNameInput(fallback){
+    const el = document.getElementById('nameInput');
+    const val = el ? el.value.trim().slice(0, 24) : '';
+    return val || fallback;
+  }
+
+  function nameFor(playerNum){
+    const n = playerNames[playerNum];
+    return (n && String(n).trim()) || `Player ${playerNum}`;
+  }
+
+  function opponentName(){
+    const oppNum = myPlayerNumber === 1 ? 2 : 1;
+    return nameFor(oppNum);
   }
 
   // ---------- Sound / haptics / confetti ----------
@@ -720,7 +761,7 @@
     if (myPlayerNumber !== 1 || !currentRoomId || phase === 'idle') return;
     try{
       localStorage.setItem(SESSION_KEY, JSON.stringify({
-        role: 'host', roomId: currentRoomId, N, qx, qy, phase, currentPlayer, placingPlayer, moveHistory, scores, ts: Date.now()
+        role: 'host', roomId: currentRoomId, N, qx, qy, phase, currentPlayer, placingPlayer, playerNames, moveHistory, scores, ts: Date.now()
       }));
     } catch(e){}
   }
@@ -749,7 +790,7 @@
   }
 
   function buildSyncPayload(){
-    return { type: 'sync', N, qx, qy, phase, currentPlayer, placingPlayer, moveHistory, scores };
+    return { type: 'sync', N, qx, qy, phase, currentPlayer, placingPlayer, playerNames, moveHistory, scores };
   }
 
   function setupPrimaryConnection(){
@@ -777,6 +818,7 @@
       N = msg.N || 16;
       qx = msg.qx; qy = msg.qy; phase = msg.phase; currentPlayer = msg.currentPlayer || 1;
       placingPlayer = msg.placingPlayer || 1;
+      playerNames = msg.playerNames && typeof msg.playerNames === 'object' ? Object.assign({ 1: 'Player 1', 2: 'Player 2' }, msg.playerNames) : { 1: 'Player 1', 2: 'Player 2' };
       moveHistory = Array.isArray(msg.moveHistory) ? msg.moveHistory.slice() : [];
       scores = msg.scores && typeof msg.scores === 'object' ? Object.assign({ 1: 0, 2: 0 }, msg.scores) : { 1: 0, 2: 0 };
       selected = false;
@@ -789,7 +831,7 @@
       rejected = true;
       clearConnectTimeout();
       gameAreaEl.style.display = 'none';
-      renderLobby('error', 'That game already has two players. Ask your host for a fresh link.');
+      renderLobby('room-full', currentRoomId);
     }
   }
 
@@ -816,7 +858,7 @@
 
   function startHostGrace(){
     statusEl.classList.add('placing');
-    statusEl.textContent = 'Your opponent disconnected — waiting for them to reconnect…';
+    statusEl.textContent = `${opponentName()} disconnected — waiting for them to reconnect…`;
     clearTimeout(hostGraceTimeout);
     hostGraceTimeout = setTimeout(() => {
       gameAreaEl.style.display = 'none';
@@ -838,7 +880,7 @@
       return;
     }
     const roleMeta = myPlayerNumber === 0 ? 'spectator' : 'guest';
-    conn = peer.connect(currentRoomId, { reliable: true, metadata: { role: roleMeta } });
+    conn = peer.connect(currentRoomId, { reliable: true, metadata: { role: roleMeta, name: myName } });
     setupPrimaryConnection();
     let settled = false;
     conn.on('open', () => {
@@ -872,6 +914,8 @@
       clearTimeout(hostGraceTimeout);
       hostGraceTimeout = null;
       conn = c;
+      const incomingName = c.metadata && c.metadata.name ? String(c.metadata.name).trim().slice(0, 24) : '';
+      playerNames[2] = incomingName || 'Player 2';
       setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
@@ -898,6 +942,7 @@
 
   function initHost(){
     myPlayerNumber = 1;
+    playerNames = { 1: myName || 'Player 1', 2: 'Player 2' };
     const roomId = ROOM_PREFIX + randomRoomSuffix(6);
     currentRoomId = roomId;
     peer = new Peer(roomId, { config: ICE_CONFIG });
@@ -913,6 +958,8 @@
     N = saved.N || 16;
     qx = saved.qx; qy = saved.qy; phase = saved.phase; currentPlayer = saved.currentPlayer || 1;
     placingPlayer = saved.placingPlayer || 1;
+    playerNames = saved.playerNames && typeof saved.playerNames === 'object' ? Object.assign({ 1: 'Player 1', 2: 'Player 2' }, saved.playerNames) : { 1: 'Player 1', 2: 'Player 2' };
+    myName = playerNames[1];
     moveHistory = Array.isArray(saved.moveHistory) ? saved.moveHistory : [];
     scores = saved.scores && typeof saved.scores === 'object' ? saved.scores : { 1: 0, 2: 0 };
     selected = false;
@@ -927,7 +974,7 @@
     renderHistory();
     renderScoreboard();
     statusEl.classList.add('placing');
-    statusEl.textContent = 'Resuming your previous game — waiting for your opponent to rejoin…';
+    statusEl.textContent = `Resuming your previous game — waiting for ${opponentName()} to rejoin…`;
 
     peer = new Peer(saved.roomId, { config: ICE_CONFIG });
     peer.on('open', () => {});
@@ -941,11 +988,12 @@
   function initGuest(roomId){
     myPlayerNumber = 2;
     currentRoomId = roomId;
+    playerNames[2] = myName || 'Player 2';
     peer = new Peer({ config: ICE_CONFIG });
 
     peer.on('open', () => {
       renderLobby('joining');
-      conn = peer.connect(roomId, { reliable: true, metadata: { role: 'guest' } });
+      conn = peer.connect(roomId, { reliable: true, metadata: { role: 'guest', name: myName } });
       setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
@@ -989,10 +1037,10 @@
   function setRoleBadge(){
     if (myPlayerNumber === 1){
       roleBadgeEl.className = 'role-badge host';
-      roleBadgeEl.textContent = 'You are Player 1 — Host';
+      roleBadgeEl.textContent = `You are ${nameFor(1)} (Host)`;
     } else if (myPlayerNumber === 2){
       roleBadgeEl.className = 'role-badge guest';
-      roleBadgeEl.textContent = 'You are Player 2 — Guest';
+      roleBadgeEl.textContent = `You are ${nameFor(2)} (Guest)`;
     } else {
       roleBadgeEl.className = 'role-badge spectator';
       roleBadgeEl.textContent = 'You are Spectating';
@@ -1020,6 +1068,10 @@
       lobbyEl.innerHTML = `
         <p class="lobby-text">Start a match and send the link to a friend anywhere &mdash; their browser connects straight to yours, no accounts needed.</p>
         <div class="field-row">
+          <label for="nameInput">Your name</label>
+          <input type="text" id="nameInput" class="name-field" maxlength="24" placeholder="Player 1" value="${escapeHtml(getSavedName())}">
+        </div>
+        <div class="field-row">
           <label for="boardSizeSelect">Board size</label>
           <select id="boardSizeSelect">
             <option value="8">8 &times; 8</option>
@@ -1032,6 +1084,8 @@
         <button id="createBtn" class="btn-primary" type="button">Create Game</button>
       `;
       document.getElementById('createBtn').addEventListener('click', () => {
+        myName = readNameInput('Player 1');
+        saveName(myName);
         N = parseInt(document.getElementById('boardSizeSelect').value, 10) || 16;
         initHost();
       });
@@ -1040,24 +1094,45 @@
       }
       return;
     }
+    if (state === 'join-prompt'){
+      lobbyEl.innerHTML = `
+        <p class="lobby-text">You've been invited to a game of Corner the Queen.</p>
+        <div class="field-row">
+          <label for="nameInput">Your name</label>
+          <input type="text" id="nameInput" class="name-field" maxlength="24" placeholder="Player 2" value="${escapeHtml(getSavedName())}">
+        </div>
+        <button id="joinBtn" class="btn-primary" type="button">Join Game</button>
+      `;
+      document.getElementById('joinBtn').addEventListener('click', () => {
+        myName = readNameInput('Player 2');
+        saveName(myName);
+        initGuest(extra);
+      });
+      return;
+    }
     if (state === 'hosting-waiting'){
       const link = location.origin + location.pathname + '?room=' + extra;
-      const spectateLink = link + '&spectate=1';
       lobbyEl.innerHTML = `
         <p class="lobby-text">Send this link to your opponent:</p>
         <div class="room-link-row">
           <input id="roomLinkInput" class="room-link" type="text" readonly value="${escapeHtml(link)}">
           <button id="copyBtn" class="btn-secondary" type="button">Copy</button>
         </div>
-        <p class="lobby-text" style="margin-top:6px;">Or invite someone to watch only:</p>
-        <div class="room-link-row">
-          <input id="spectateLinkInput" class="room-link" type="text" readonly value="${escapeHtml(spectateLink)}">
-          <button id="copySpectateBtn" class="btn-secondary" type="button">Copy</button>
-        </div>
         <p class="lobby-status">Waiting for opponent to join&hellip;</p>
       `;
       document.getElementById('copyBtn').addEventListener('click', () => copyToClipboard(link, 'copyBtn'));
-      document.getElementById('copySpectateBtn').addEventListener('click', () => copyToClipboard(spectateLink, 'copySpectateBtn'));
+      return;
+    }
+    if (state === 'room-full'){
+      lobbyEl.innerHTML = `
+        <p class="lobby-status error">This game already has two players.</p>
+        <button id="watchBtn" class="btn-primary" type="button" style="margin-top:14px;">Watch Game</button>
+      `;
+      document.getElementById('watchBtn').addEventListener('click', () => {
+        rejected = false;
+        if (peer) peer.destroy();
+        initSpectator(extra);
+      });
       return;
     }
     if (state === 'joining'){
@@ -1223,17 +1298,17 @@
       if (myPlayerNumber === placingPlayer){
         text = 'Your turn — click a highlighted cell in the top row or right column to place the queen';
       } else if (myPlayerNumber === 0){
-        text = `Waiting for Player ${placingPlayer} to place the queen…`;
+        text = `Waiting for ${nameFor(placingPlayer)} to place the queen…`;
       } else {
-        text = 'Waiting for your opponent to place the queen…';
+        text = `Waiting for ${opponentName()} to place the queen…`;
       }
     } else if (phase === 'over'){
       statusEl.classList.add('win');
-      if (myPlayerNumber === 0) text = `♛ Player ${currentPlayer} cornered the queen and wins!`;
-      else text = currentPlayer === myPlayerNumber ? '♛ You cornered the queen — you win!' : '♛ Your opponent cornered the queen and wins!';
+      if (myPlayerNumber === 0) text = `♛ ${nameFor(currentPlayer)} cornered the queen and wins!`;
+      else text = currentPlayer === myPlayerNumber ? '♛ You cornered the queen — you win!' : `♛ ${opponentName()} cornered the queen and wins!`;
     } else {
-      if (myPlayerNumber === 0) text = `Player ${currentPlayer}'s turn`;
-      else text = currentPlayer === myPlayerNumber ? 'Your turn — move the queen' : "Opponent's turn — waiting…";
+      if (myPlayerNumber === 0) text = `${nameFor(currentPlayer)}'s turn`;
+      else text = currentPlayer === myPlayerNumber ? 'Your turn — move the queen' : `${opponentName()}'s turn — waiting…`;
     }
     statusEl.textContent = text;
 
@@ -1255,7 +1330,7 @@
     if (!el) return;
     el.innerHTML = moveHistory.map(m => {
       const verb = m.type === 'place' ? 'placed the queen at' : 'moved to';
-      return `<li>Player ${m.player} ${verb} (${m.x}, ${m.y})</li>`;
+      return `<li>${escapeHtml(nameFor(m.player))} ${verb} (${m.x}, ${m.y})</li>`;
     }).join('');
     el.scrollTop = el.scrollHeight;
   }
@@ -1263,7 +1338,7 @@
   function renderScoreboard(){
     const el = document.getElementById('scoreboard');
     if (!el) return;
-    el.textContent = `Player 1 — ${scores[1] || 0}      Player 2 — ${scores[2] || 0}`;
+    el.textContent = `${nameFor(1)} — ${scores[1] || 0}      ${nameFor(2)} — ${scores[2] || 0}`;
   }
 
   function moveQueenTo(x, y, broadcast){
@@ -1362,12 +1437,9 @@
 
   const params = new URLSearchParams(location.search);
   const roomParam = params.get('room');
-  const isSpectateParam = params.get('spectate') === '1';
 
-  if (roomParam && isSpectateParam){
-    initSpectator(roomParam);
-  } else if (roomParam){
-    initGuest(roomParam);
+  if (roomParam){
+    renderLobby('join-prompt', roomParam);
   } else {
     resumableSession = loadResumableSession();
     renderLobby('choose');
