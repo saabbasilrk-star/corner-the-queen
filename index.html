@@ -467,6 +467,21 @@
   let peer = null;
   let conn = null;
   let myPlayerNumber = null; // 1 = host, 2 = guest
+  let connectTimeoutHandle = null;
+  let rejected = false; // set true if the room turned out to already be full
+
+  // Public STUN + free TURN relay (openrelay.metered.ca) so the connection
+  // can still be established when both players are behind restrictive NATs
+  // (very common on mobile carrier networks) — STUN alone often fails there.
+  const ICE_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:openrelay.metered.ca:80' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  };
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -495,27 +510,59 @@
     if (msg.type === 'place') placeQueenAt(msg.x, msg.y, false);
     else if (msg.type === 'move') moveQueenTo(msg.x, msg.y, false);
     else if (msg.type === 'newgame') startNewGame(false);
+    else if (msg.type === 'room-full'){
+      rejected = true;
+      clearConnectTimeout();
+      gameAreaEl.style.display = 'none';
+      renderLobby('error', 'That game already has two players. Ask your host for a fresh link.');
+    }
   }
 
   function onOpponentLeft(){
+    if (rejected) return; // already showing the more accurate "room full" message
     gameAreaEl.style.display = 'none';
     renderLobby('opponent-left');
+  }
+
+  function startConnectTimeout(){
+    clearConnectTimeout();
+    connectTimeoutHandle = setTimeout(() => {
+      renderLobby('error', "Connection timed out. This can happen on some mobile or public wifi networks — try again, or switch one player to a different network.");
+      if (peer) peer.destroy();
+    }, 20000);
+  }
+
+  function clearConnectTimeout(){
+    if (connectTimeoutHandle){
+      clearTimeout(connectTimeoutHandle);
+      connectTimeoutHandle = null;
+    }
   }
 
   function initHost(){
     myPlayerNumber = 1;
     const roomId = ROOM_PREFIX + randomRoomSuffix(6);
-    peer = new Peer(roomId);
+    peer = new Peer(roomId, { config: ICE_CONFIG });
 
     peer.on('open', id => {
       renderLobby('hosting-waiting', id);
     });
     peer.on('connection', c => {
+      if (conn && conn.open){
+        c.on('open', () => {
+          c.send({ type: 'room-full' });
+          setTimeout(() => c.close(), 500); // give the message time to actually transmit
+        });
+        return;
+      }
       conn = c;
       setupConnection();
+      startConnectTimeout();
       conn.on('open', () => {
+        clearConnectTimeout();
         renderLobby('connected');
         setTimeout(() => {
+          if (rejected) return;
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
@@ -523,27 +570,30 @@
         }, 500);
       });
     });
-    peer.on('error', err => renderLobby('error', null, err && err.message));
+    peer.on('error', err => { clearConnectTimeout(); renderLobby('error', err && err.message); });
   }
 
   function initGuest(roomId){
     myPlayerNumber = 2;
-    peer = new Peer();
+    peer = new Peer({ config: ICE_CONFIG });
 
     peer.on('open', () => {
       renderLobby('joining');
       conn = peer.connect(roomId, { reliable: true });
       setupConnection();
+      startConnectTimeout();
       conn.on('open', () => {
+        clearConnectTimeout();
         renderLobby('connected');
         setTimeout(() => {
+          if (rejected) return;
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
         }, 500);
       });
     });
-    peer.on('error', err => renderLobby('error', null, err && err.message));
+    peer.on('error', err => { clearConnectTimeout(); renderLobby('error', err && err.message); });
   }
 
   function setRoleBadge(){
