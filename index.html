@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Corner the Queen</title>
 <script src="https://unpkg.com/peerjs@1/dist/peerjs.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg: #f3ead9;
@@ -529,9 +531,81 @@
     text-align:center;
   }
 
+  .records-card{
+    width: 100%;
+    max-width: 760px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    box-shadow: 0 10px 26px var(--shadow);
+  }
+  .records-eyebrow{
+    margin: 0 0 4px;
+    text-align:center;
+    font-size: 0.68rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gold-strong);
+    font-weight: 600;
+  }
+  .records-stat{
+    text-align:center;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin: 4px 0 18px;
+    font-variant-numeric: tabular-nums;
+  }
+  .records-columns{
+    display:flex;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+  .records-col{
+    flex: 1;
+    min-width: 220px;
+  }
+  .records-col h3{
+    margin: 0 0 10px;
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--gold-strong);
+    font-weight: 700;
+  }
+  .leaderboard-list, .recent-games-list{
+    list-style:none;
+    margin:0; padding:0;
+    font-size: 0.84rem;
+    color: var(--ink-soft);
+    max-height: 220px;
+    overflow-y:auto;
+  }
+  .leaderboard-list li{
+    display:flex;
+    justify-content:space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .leaderboard-list .lb-name{ color: var(--ink); font-weight: 600; }
+  .leaderboard-list .lb-wins{
+    font-variant-numeric: tabular-nums;
+    color: var(--gold-strong);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .recent-games-list li{
+    padding: 6px 0;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .recent-games-list li b{ color: var(--ink); }
+  .records-empty{ color: var(--ink-soft); font-style: italic; }
+
   @media (max-width: 660px){
     .cabinet{ flex-direction:column; align-items:center; }
     .ledger{ width: 100%; max-width: 360px; order: -1; }
+    .records-columns{ flex-direction: column; gap: 18px; }
   }
 </style>
 </head>
@@ -590,6 +664,21 @@
 
     </div>
   </div>
+
+  <section id="publicRecords" class="records-card">
+    <p class="records-eyebrow">The Royal Ledger</p>
+    <div class="records-stat" id="totalGamesStat">Loading stats&hellip;</div>
+    <div class="records-columns">
+      <div class="records-col">
+        <h3>Leaderboard</h3>
+        <ol id="leaderboardList" class="leaderboard-list"></ol>
+      </div>
+      <div class="records-col">
+        <h3>Recent Games</h3>
+        <ul id="recentGamesList" class="recent-games-list"></ul>
+      </div>
+    </div>
+  </section>
 
   <footer>Corner the Queen &mdash; a two-player queen-cornering board game.</footer>
 
@@ -650,6 +739,97 @@
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- Public game records (Firebase Firestore) ----------
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDKUK-NbdjcD8cd-H0-YNVY1HRAKi1OHso",
+    authDomain: "corner-the-queen.firebaseapp.com",
+    projectId: "corner-the-queen",
+    storageBucket: "corner-the-queen.firebasestorage.app",
+    messagingSenderId: "254795381468",
+    appId: "1:254795381468:web:d2c3be1e1753ac6e875219"
+  };
+
+  let db = null;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  } catch(e){ console.error('Firebase init failed', e); }
+
+  function timeAgo(date){
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  }
+
+  async function recordGameResult(winnerName, loserName, boardSize, movesCount){
+    if (!db) return;
+    try{
+      await db.collection('games').add({
+        winner: winnerName, loser: loserName, boardSize, movesCount,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await db.collection('players').doc(winnerName).set({
+        wins: firebase.firestore.FieldValue.increment(1), name: winnerName
+      }, { merge: true });
+      await db.collection('stats').doc('global').set({
+        totalGames: firebase.firestore.FieldValue.increment(1)
+      }, { merge: true });
+      loadPublicRecords();
+    } catch(e){ console.error('Failed to record game result', e); }
+  }
+
+  async function loadPublicRecords(){
+    if (!db) return;
+    const statEl = document.getElementById('totalGamesStat');
+    const lbEl = document.getElementById('leaderboardList');
+    const recentEl = document.getElementById('recentGamesList');
+
+    try{
+      const statsDoc = await db.collection('stats').doc('global').get();
+      const total = statsDoc.exists ? (statsDoc.data().totalGames || 0) : 0;
+      if (statEl) statEl.textContent = `${total.toLocaleString()} game${total === 1 ? '' : 's'} played on Corner the Queen`;
+    } catch(e){
+      if (statEl) statEl.textContent = '';
+    }
+
+    try{
+      const snap = await db.collection('players').orderBy('wins', 'desc').limit(10).get();
+      if (!lbEl) { /* noop */ }
+      else if (snap.empty){
+        lbEl.innerHTML = '<li class="records-empty">No games played yet &mdash; be the first!</li>';
+      } else {
+        lbEl.innerHTML = snap.docs.map(doc => {
+          const d = doc.data();
+          return `<li><span class="lb-name">${escapeHtml(d.name || doc.id)}</span><span class="lb-wins">${d.wins || 0} win${(d.wins || 0) === 1 ? '' : 's'}</span></li>`;
+        }).join('');
+      }
+    } catch(e){
+      if (lbEl) lbEl.innerHTML = '<li class="records-empty">Couldn\'t load the leaderboard.</li>';
+    }
+
+    try{
+      const snap = await db.collection('games').orderBy('ts', 'desc').limit(20).get();
+      if (!recentEl) { /* noop */ }
+      else if (snap.empty){
+        recentEl.innerHTML = '<li class="records-empty">No games played yet.</li>';
+      } else {
+        recentEl.innerHTML = snap.docs.map(doc => {
+          const d = doc.data();
+          const when = d.ts && d.ts.toDate ? timeAgo(d.ts.toDate()) : 'just now';
+          return `<li><b>${escapeHtml(d.winner)}</b> beat ${escapeHtml(d.loser)} &middot; ${d.boardSize}&times;${d.boardSize} &middot; ${when}</li>`;
+        }).join('');
+      }
+    } catch(e){
+      if (recentEl) recentEl.innerHTML = '<li class="records-empty">Couldn\'t load recent games.</li>';
+    }
   }
 
   function randomRoomSuffix(len){
@@ -1354,6 +1534,10 @@
       renderHistory();
       renderScoreboard();
       if (broadcast) sendMsg({ type: 'move', x, y });
+      if (myPlayerNumber === 1){
+        const loser = mover === 1 ? 2 : 1;
+        recordGameResult(nameFor(mover), nameFor(loser), N, moveHistory.length);
+      }
       return;
     }
     currentPlayer = currentPlayer === 1 ? 2 : 1;
@@ -1434,6 +1618,8 @@
   document.getElementById('newGameBtn').addEventListener('click', () => startNewGame(true));
 
   // ---------- Boot ----------
+
+  loadPublicRecords();
 
   const params = new URLSearchParams(location.search);
   const roomParam = params.get('room');
