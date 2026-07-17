@@ -109,6 +109,12 @@
     letter-spacing: 0.5px;
     text-wrap: balance;
   }
+  .credit{
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--ink-soft);
+  }
   .subtitle{
     margin:0;
     color: var(--ink-soft);
@@ -525,6 +531,7 @@
   <header class="masthead">
     <p class="eyebrow">A Royal Pursuit</p>
     <h1>Corner the Queen</h1>
+    <p class="credit">By: Suhail Ahmed Abbasi</p>
     <p class="subtitle">Two players, anywhere in the world. One queen. Whoever herds her into the corner wins.</p>
   </header>
 
@@ -558,7 +565,7 @@
         <button id="newGameBtn" class="btn-primary" type="button">New Game</button>
         <ol class="rules-list">
           <li>Create a game and send the link to a friend, or open a link a friend sent you.</li>
-          <li>Once connected, the <b>host</b> places the queen anywhere in the glowing top row or right column.</li>
+          <li>Once connected, whoever's turn it is to place (the host goes first) puts the queen anywhere in the glowing top row or right column &mdash; this alternates every new game.</li>
           <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
           <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
         </ol>
@@ -594,6 +601,7 @@
   let qx = null, qy = null;
   let phase = 'idle'; // 'idle' | 'placement' | 'playing' | 'over'
   let currentPlayer = 1; // 1 or 2
+  let placingPlayer = 1; // who places the queen this game — alternates each new game
   let selected = false;
   let moveHistory = [];
   let scores = { 1: 0, 2: 0 };
@@ -712,7 +720,7 @@
     if (myPlayerNumber !== 1 || !currentRoomId || phase === 'idle') return;
     try{
       localStorage.setItem(SESSION_KEY, JSON.stringify({
-        role: 'host', roomId: currentRoomId, N, qx, qy, phase, currentPlayer, moveHistory, scores, ts: Date.now()
+        role: 'host', roomId: currentRoomId, N, qx, qy, phase, currentPlayer, placingPlayer, moveHistory, scores, ts: Date.now()
       }));
     } catch(e){}
   }
@@ -741,7 +749,7 @@
   }
 
   function buildSyncPayload(){
-    return { type: 'sync', N, qx, qy, phase, currentPlayer, moveHistory, scores };
+    return { type: 'sync', N, qx, qy, phase, currentPlayer, placingPlayer, moveHistory, scores };
   }
 
   function setupPrimaryConnection(){
@@ -768,6 +776,7 @@
     else if (msg.type === 'sync'){
       N = msg.N || 16;
       qx = msg.qx; qy = msg.qy; phase = msg.phase; currentPlayer = msg.currentPlayer || 1;
+      placingPlayer = msg.placingPlayer || 1;
       moveHistory = Array.isArray(msg.moveHistory) ? msg.moveHistory.slice() : [];
       scores = msg.scores && typeof msg.scores === 'object' ? Object.assign({ 1: 0, 2: 0 }, msg.scores) : { 1: 0, 2: 0 };
       selected = false;
@@ -874,7 +883,7 @@
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
           if (phase === 'idle'){
-            startNewGame(true);
+            startFirstGame(true);
           } else {
             buildBoard();
             render();
@@ -903,6 +912,7 @@
     currentRoomId = saved.roomId;
     N = saved.N || 16;
     qx = saved.qx; qy = saved.qy; phase = saved.phase; currentPlayer = saved.currentPlayer || 1;
+    placingPlayer = saved.placingPlayer || 1;
     moveHistory = Array.isArray(saved.moveHistory) ? saved.moveHistory : [];
     scores = saved.scores && typeof saved.scores === 'object' ? saved.scores : { 1: 0, 2: 0 };
     selected = false;
@@ -1210,9 +1220,13 @@
     let text;
     if (phase === 'placement'){
       statusEl.classList.add('placing');
-      text = myPlayerNumber === 1
-        ? 'Your turn — click a highlighted cell in the top row or right column to place the queen'
-        : 'Waiting for the host to place the queen…';
+      if (myPlayerNumber === placingPlayer){
+        text = 'Your turn — click a highlighted cell in the top row or right column to place the queen';
+      } else if (myPlayerNumber === 0){
+        text = `Waiting for Player ${placingPlayer} to place the queen…`;
+      } else {
+        text = 'Waiting for your opponent to place the queen…';
+      }
     } else if (phase === 'over'){
       statusEl.classList.add('win');
       if (myPlayerNumber === 0) text = `♛ Player ${currentPlayer} cornered the queen and wins!`;
@@ -1223,7 +1237,7 @@
     }
     statusEl.textContent = text;
 
-    const isMyTurnNow = (myPlayerNumber === 1 && phase === 'placement') || (phase === 'playing' && currentPlayer === myPlayerNumber);
+    const isMyTurnNow = (myPlayerNumber === placingPlayer && phase === 'placement') || (phase === 'playing' && currentPlayer === myPlayerNumber);
     if (isMyTurnNow && !wasMyTurn) playTurnTone();
     wasMyTurn = isMyTurnNow;
 
@@ -1276,8 +1290,8 @@
   function placeQueenAt(x, y, broadcast){
     qx = x; qy = y;
     phase = 'playing';
-    currentPlayer = 2;
-    moveHistory.push({ player: 1, type: 'place', x, y });
+    currentPlayer = placingPlayer === 1 ? 2 : 1;
+    moveHistory.push({ player: placingPlayer, type: 'place', x, y });
     render();
     renderHistory();
     if (broadcast) sendMsg({ type: 'place', x, y });
@@ -1288,7 +1302,7 @@
     if (myPlayerNumber === 0) return; // spectators are read-only
 
     if (phase === 'placement'){
-      if (myPlayerNumber !== 1) return;
+      if (myPlayerNumber !== placingPlayer) return;
       if (isStartCell(x, y)) placeQueenAt(x, y, true);
       return;
     }
@@ -1315,9 +1329,9 @@
     handleCellActivate(x, y);
   }
 
-  function startNewGame(broadcast){
+  function resetBoardState(){
     qx = null; qy = null;
-    currentPlayer = 1;
+    currentPlayer = placingPlayer;
     selected = false;
     phase = 'placement';
     moveHistory = [];
@@ -1328,6 +1342,17 @@
     render();
     renderHistory();
     renderScoreboard();
+  }
+
+  function startFirstGame(broadcast){
+    placingPlayer = 1; // the very first game of a room always starts with the host placing
+    resetBoardState();
+    if (broadcast) sendMsg(buildSyncPayload());
+  }
+
+  function startNewGame(broadcast){
+    placingPlayer = placingPlayer === 1 ? 2 : 1; // alternate who places each new game
+    resetBoardState();
     if (broadcast) sendMsg(buildSyncPayload());
   }
 
