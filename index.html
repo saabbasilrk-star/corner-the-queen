@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Corner the Queen</title>
+<script src="https://unpkg.com/peerjs@1/dist/peerjs.min.js"></script>
 <style>
   :root{
     --bg: #f3ead9;
@@ -113,6 +114,99 @@
     color: var(--ink-soft);
     font-size: 0.98rem;
     text-wrap: balance;
+  }
+
+  .lobby-card{
+    width: 100%;
+    max-width: 420px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 26px 28px;
+    box-shadow: 0 14px 30px var(--shadow);
+    text-align:center;
+  }
+  .lobby-text{
+    margin: 0 0 16px;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .lobby-status{
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--sapphire);
+  }
+  .lobby-status.error{ color: var(--garnet); }
+  .room-link-row{
+    display:flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .room-link{
+    flex:1;
+    min-width: 0;
+    padding: 9px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 0.82rem;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .btn-primary, .btn-secondary{
+    appearance:none;
+    border:none;
+    cursor:pointer;
+    padding: 11px 16px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.1s ease;
+  }
+  .btn-primary{
+    color: #241a12;
+    background: linear-gradient(160deg, var(--gold-strong), var(--gold));
+    box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 14px var(--shadow);
+    width: 100%;
+  }
+  .btn-primary:hover{ filter: brightness(1.05); }
+  .btn-primary:active{
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 3px 8px var(--shadow);
+  }
+  .btn-secondary{
+    color: var(--ink);
+    background: var(--panel-border);
+    white-space: nowrap;
+  }
+  .btn-secondary:hover{ filter: brightness(1.08); }
+  .btn-primary:focus-visible, .btn-secondary:focus-visible{
+    outline: 2px solid var(--sapphire);
+    outline-offset: 2px;
+  }
+
+  .role-badge{
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .role-badge.host{ color: var(--garnet); }
+  .role-badge.guest{ color: var(--sapphire); }
+
+  #gameArea{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 16px;
   }
 
   .cabinet{
@@ -273,34 +367,7 @@
     color: var(--gold-strong);
     font-weight: 700;
   }
-  #newGameBtn{
-    display:block;
-    width:100%;
-    appearance:none;
-    border:none;
-    cursor:pointer;
-    padding: 11px 14px;
-    margin-bottom: 18px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 0.82rem;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: #241a12;
-    background: linear-gradient(160deg, var(--gold-strong), var(--gold));
-    box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 14px var(--shadow);
-    transition: transform 0.08s ease, box-shadow 0.08s ease;
-  }
-  #newGameBtn:hover{ filter: brightness(1.05); }
-  #newGameBtn:active{
-    transform: translateY(2px);
-    box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 3px 8px var(--shadow);
-  }
-  #newGameBtn:focus-visible{
-    outline: 2px solid var(--sapphire);
-    outline-offset: 2px;
-  }
+  #newGameBtn{ margin-bottom: 18px; }
 
   .rules-list{
     margin:0;
@@ -336,38 +403,44 @@
   <header class="masthead">
     <p class="eyebrow">A Royal Pursuit</p>
     <h1>Corner the Queen</h1>
-    <p class="subtitle">Two players. One queen. Whoever herds her into the corner wins.</p>
+    <p class="subtitle">Two players, anywhere in the world. One queen. Whoever herds her into the corner wins.</p>
   </header>
 
-  <div class="cabinet">
+  <div id="lobby" class="lobby-card"></div>
 
-    <div class="board-column">
-      <div class="plaque" id="status">Click New Game to begin</div>
-      <div class="frame">
-        <span class="brace tl"></span>
-        <span class="brace tr"></span>
-        <span class="brace bl"></span>
-        <span class="brace br"></span>
-        <div id="board"></div>
+  <div id="gameArea" style="display:none;">
+    <div id="roleBadge" class="role-badge"></div>
+
+    <div class="cabinet">
+
+      <div class="board-column">
+        <div class="plaque" id="status"></div>
+        <div class="frame">
+          <span class="brace tl"></span>
+          <span class="brace tr"></span>
+          <span class="brace bl"></span>
+          <span class="brace br"></span>
+          <div id="board"></div>
+        </div>
+        <div class="legend">
+          <span><i class="dot sapphire"></i> Starting zone</span>
+          <span><i class="dot gold"></i> Corner (target)</span>
+          <span><i class="dot verdigris"></i> Legal move</span>
+        </div>
       </div>
-      <div class="legend">
-        <span><i class="dot sapphire"></i> Starting zone</span>
-        <span><i class="dot gold"></i> Corner (target)</span>
-        <span><i class="dot verdigris"></i> Legal move</span>
-      </div>
+
+      <aside class="ledger">
+        <h2>How to Play</h2>
+        <button id="newGameBtn" class="btn-primary" type="button">New Game</button>
+        <ol class="rules-list">
+          <li>Create a game and send the link to a friend, or open a link a friend sent you.</li>
+          <li>Once connected, the <b>host</b> places the queen anywhere in the glowing top row or right column.</li>
+          <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
+          <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
+        </ol>
+      </aside>
+
     </div>
-
-    <aside class="ledger">
-      <h2>How to Play</h2>
-      <button id="newGameBtn" type="button">New Game</button>
-      <ol class="rules-list">
-        <li>The board is <b>16 &times; 16</b>.</li>
-        <li><b>Player 1</b> places the queen anywhere in the glowing top row or right column.</li>
-        <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
-        <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
-      </ol>
-    </aside>
-
   </div>
 
   <footer>Corner the Queen &mdash; a two-player queen-cornering board game.</footer>
@@ -378,14 +451,169 @@
 (function(){
   const boardEl = document.getElementById('board');
   const statusEl = document.getElementById('status');
+  const lobbyEl = document.getElementById('lobby');
+  const gameAreaEl = document.getElementById('gameArea');
+  const roleBadgeEl = document.getElementById('roleBadge');
 
   const N = 16;
   const cellSize = 30;
+  const ROOM_PREFIX = 'ctq-';
 
   let qx = null, qy = null;
   let phase = 'idle'; // 'idle' | 'placement' | 'playing' | 'over'
   let currentPlayer = 1; // 1 or 2
   let selected = false;
+
+  let peer = null;
+  let conn = null;
+  let myPlayerNumber = null; // 1 = host, 2 = guest
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function randomRoomSuffix(len){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+
+  // ---------- Networking ----------
+
+  function sendMsg(msg){
+    if (conn && conn.open) conn.send(msg);
+  }
+
+  function setupConnection(){
+    conn.on('data', applyRemote);
+    conn.on('close', onOpponentLeft);
+    conn.on('error', () => onOpponentLeft());
+  }
+
+  function applyRemote(msg){
+    if (msg.type === 'place') placeQueenAt(msg.x, msg.y, false);
+    else if (msg.type === 'move') moveQueenTo(msg.x, msg.y, false);
+    else if (msg.type === 'newgame') startNewGame(false);
+  }
+
+  function onOpponentLeft(){
+    gameAreaEl.style.display = 'none';
+    renderLobby('opponent-left');
+  }
+
+  function initHost(){
+    myPlayerNumber = 1;
+    const roomId = ROOM_PREFIX + randomRoomSuffix(6);
+    peer = new Peer(roomId);
+
+    peer.on('open', id => {
+      renderLobby('hosting-waiting', id);
+    });
+    peer.on('connection', c => {
+      conn = c;
+      setupConnection();
+      conn.on('open', () => {
+        renderLobby('connected');
+        setTimeout(() => {
+          lobbyEl.style.display = 'none';
+          gameAreaEl.style.display = 'flex';
+          setRoleBadge();
+          startNewGame(true);
+        }, 500);
+      });
+    });
+    peer.on('error', err => renderLobby('error', null, err && err.message));
+  }
+
+  function initGuest(roomId){
+    myPlayerNumber = 2;
+    peer = new Peer();
+
+    peer.on('open', () => {
+      renderLobby('joining');
+      conn = peer.connect(roomId, { reliable: true });
+      setupConnection();
+      conn.on('open', () => {
+        renderLobby('connected');
+        setTimeout(() => {
+          lobbyEl.style.display = 'none';
+          gameAreaEl.style.display = 'flex';
+          setRoleBadge();
+        }, 500);
+      });
+    });
+    peer.on('error', err => renderLobby('error', null, err && err.message));
+  }
+
+  function setRoleBadge(){
+    if (myPlayerNumber === 1){
+      roleBadgeEl.className = 'role-badge host';
+      roleBadgeEl.textContent = 'You are Player 1 — Host';
+    } else {
+      roleBadgeEl.className = 'role-badge guest';
+      roleBadgeEl.textContent = 'You are Player 2 — Guest';
+    }
+  }
+
+  // ---------- Lobby UI ----------
+
+  function renderLobby(state, extra){
+    if (state === 'choose'){
+      lobbyEl.innerHTML = `
+        <p class="lobby-text">Start a match and send the link to a friend anywhere &mdash; their browser connects straight to yours, no accounts needed.</p>
+        <button id="createBtn" class="btn-primary" type="button">Create Game</button>
+      `;
+      document.getElementById('createBtn').addEventListener('click', initHost);
+      return;
+    }
+    if (state === 'hosting-waiting'){
+      const link = location.origin + location.pathname + '?room=' + extra;
+      lobbyEl.innerHTML = `
+        <p class="lobby-text">Send this link to your opponent:</p>
+        <div class="room-link-row">
+          <input id="roomLinkInput" class="room-link" type="text" readonly value="${escapeHtml(link)}">
+          <button id="copyBtn" class="btn-secondary" type="button">Copy</button>
+        </div>
+        <p class="lobby-status">Waiting for opponent to join&hellip;</p>
+      `;
+      document.getElementById('copyBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(link).then(() => {
+          const btn = document.getElementById('copyBtn');
+          if (!btn) return;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 1500);
+        });
+      });
+      return;
+    }
+    if (state === 'joining'){
+      lobbyEl.innerHTML = `<p class="lobby-status">Connecting to your opponent&hellip;</p>`;
+      return;
+    }
+    if (state === 'connected'){
+      lobbyEl.innerHTML = `<p class="lobby-status">Connected! Starting the game&hellip;</p>`;
+      return;
+    }
+    if (state === 'error'){
+      lobbyEl.innerHTML = `
+        <p class="lobby-status error">Couldn't connect${extra ? ': ' + escapeHtml(extra) : '.'}</p>
+        <button id="retryBtn" class="btn-secondary" type="button" style="margin-top:12px;">Try Again</button>
+      `;
+      document.getElementById('retryBtn').addEventListener('click', () => location.href = location.pathname);
+      return;
+    }
+    if (state === 'opponent-left'){
+      lobbyEl.innerHTML = `
+        <p class="lobby-status error">Your opponent disconnected.</p>
+        <button id="restartBtn" class="btn-secondary" type="button" style="margin-top:12px;">Start Over</button>
+      `;
+      document.getElementById('restartBtn').addEventListener('click', () => location.href = location.pathname);
+      return;
+    }
+  }
+
+  // ---------- Game logic ----------
 
   function isValidMove(fromX, fromY, toX, toY){
     if (toX === fromX && toY === fromY) return false;
@@ -473,47 +701,60 @@
     statusEl.classList.remove('win', 'placing');
     if (phase === 'placement'){
       statusEl.classList.add('placing');
-      statusEl.textContent = `Player 1 — click a highlighted cell in the top row or right column to place the queen`;
+      statusEl.textContent = myPlayerNumber === 1
+        ? 'Your turn — click a highlighted cell in the top row or right column to place the queen'
+        : 'Waiting for the host to place the queen…';
       return;
     }
     if (phase === 'over'){
       statusEl.classList.add('win');
-      statusEl.textContent = `♛ Player ${currentPlayer} cornered the queen and wins!`;
+      statusEl.textContent = currentPlayer === myPlayerNumber
+        ? '♛ You cornered the queen — you win!'
+        : '♛ Your opponent cornered the queen and wins!';
       return;
     }
-    statusEl.textContent = `Player ${currentPlayer}'s turn — move the queen`;
+    statusEl.textContent = currentPlayer === myPlayerNumber
+      ? 'Your turn — move the queen'
+      : "Opponent's turn — waiting…";
   }
 
-  function moveQueenTo(x, y){
+  function moveQueenTo(x, y, broadcast){
     qx = x; qy = y;
     selected = false;
     if (qx === 0 && qy === 0){
       phase = 'over';
       render();
+      if (broadcast) sendMsg({ type: 'move', x, y });
       return;
     }
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     render();
+    if (broadcast) sendMsg({ type: 'move', x, y });
   }
 
-  function placeQueenAt(x, y){
+  function placeQueenAt(x, y, broadcast){
     qx = x; qy = y;
     phase = 'playing';
     currentPlayer = 2;
     render();
+    if (broadcast) sendMsg({ type: 'place', x, y });
   }
 
   function onCellClick(e){
+    if (!conn || !conn.open) return;
+
     const cell = e.currentTarget;
     const x = parseInt(cell.dataset.x, 10);
     const y = parseInt(cell.dataset.y, 10);
 
     if (phase === 'placement'){
-      if (isStartCell(x, y)) placeQueenAt(x, y);
+      if (myPlayerNumber !== 1) return;
+      if (isStartCell(x, y)) placeQueenAt(x, y, true);
       return;
     }
 
     if (phase !== 'playing') return;
+    if (currentPlayer !== myPlayerNumber) return;
 
     if (x === qx && y === qy){
       selected = !selected;
@@ -522,11 +763,11 @@
     }
 
     if (selected && isValidMove(qx, qy, x, y)){
-      moveQueenTo(x, y);
+      moveQueenTo(x, y, true);
     }
   }
 
-  function startNewGame(){
+  function startNewGame(broadcast){
     qx = null; qy = null;
     currentPlayer = 1;
     selected = false;
@@ -534,11 +775,19 @@
 
     buildBoard();
     render();
+    if (broadcast) sendMsg({ type: 'newgame' });
   }
 
-  document.getElementById('newGameBtn').addEventListener('click', startNewGame);
+  document.getElementById('newGameBtn').addEventListener('click', () => startNewGame(true));
 
-  startNewGame();
+  // ---------- Boot ----------
+
+  const roomParam = new URLSearchParams(location.search).get('room');
+  if (roomParam){
+    initGuest(roomParam);
+  } else {
+    renderLobby('choose');
+  }
 })();
 </script>
 
