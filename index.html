@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corner the Queen</title>
+<style>
+  :root{
+    --bg: #f3ead9;
+    --panel-bg: #fbf6ec;
+    --panel-border: #d8c39c;
+    --ink: #241a12;
+    --ink-soft: #6b5a46;
+    --gold: #a97c28;
+    --gold-strong: #8a651e;
+    --sapphire: #2f5d76;
+    --verdigris: #3f6b57;
+    --garnet: #7c2130;
+    --board-light: #eadfc4;
+    --board-dark: #a9784f;
+    --shadow: rgba(36, 26, 18, 0.22);
+    --anim-play: running;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #191310;
+      --panel-bg: #221a14;
+      --panel-border: #4a3826;
+      --ink: #f2e8d6;
+      --ink-soft: #bfa989;
+      --gold: #d9ac53;
+      --gold-strong: #e8c476;
+      --sapphire: #74acce;
+      --verdigris: #74b598;
+      --garnet: #d1707d;
+      --board-light: #c9b087;
+      --board-dark: #573c25;
+      --shadow: rgba(0, 0, 0, 0.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #191310;
+    --panel-bg: #221a14;
+    --panel-border: #4a3826;
+    --ink: #f2e8d6;
+    --ink-soft: #bfa989;
+    --gold: #d9ac53;
+    --gold-strong: #e8c476;
+    --sapphire: #74acce;
+    --verdigris: #74b598;
+    --garnet: #d1707d;
+    --board-light: #c9b087;
+    --board-dark: #573c25;
+    --shadow: rgba(0, 0, 0, 0.55);
+  }
+  :root[data-theme="light"]{
+    --bg: #f3ead9;
+    --panel-bg: #fbf6ec;
+    --panel-border: #d8c39c;
+    --ink: #241a12;
+    --ink-soft: #6b5a46;
+    --gold: #a97c28;
+    --gold-strong: #8a651e;
+    --sapphire: #2f5d76;
+    --verdigris: #3f6b57;
+    --garnet: #7c2130;
+    --board-light: #eadfc4;
+    --board-dark: #a9784f;
+    --shadow: rgba(36, 26, 18, 0.22);
+  }
+  @media (prefers-reduced-motion: reduce){
+    :root{ --anim-play: paused; }
+  }
+
+  *{ box-sizing: border-box; }
+  html, body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  .stage{
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 40px 20px 56px;
+    gap: 30px;
+  }
+
+  .masthead{
+    text-align:center;
+    max-width: 560px;
+  }
+  .eyebrow{
+    margin: 0 0 6px;
+    font-size: 0.72rem;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    color: var(--gold-strong);
+    font-weight: 600;
+  }
+  h1{
+    margin: 0 0 8px;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    text-wrap: balance;
+  }
+  .subtitle{
+    margin:0;
+    color: var(--ink-soft);
+    font-size: 0.98rem;
+    text-wrap: balance;
+  }
+
+  .cabinet{
+    display:flex;
+    gap: 28px;
+    align-items:flex-start;
+    flex-wrap: wrap;
+    justify-content:center;
+  }
+
+  .board-column{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 14px;
+  }
+
+  .plaque{
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 4px var(--shadow);
+    border-radius: 5px;
+    padding: 10px 26px;
+    font-size: 0.98rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-align:center;
+    min-width: 260px;
+    min-height: 22px;
+  }
+  .plaque.win{ color: var(--gold-strong); }
+  .plaque.placing{ color: var(--sapphire); }
+
+  .frame{
+    position:relative;
+    padding: 12px;
+    border-radius: 6px;
+    background: linear-gradient(150deg, var(--board-dark), var(--panel-border) 130%);
+    box-shadow: 0 24px 46px var(--shadow), inset 0 0 0 1px rgba(0,0,0,0.28);
+  }
+  .brace{
+    position:absolute;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, var(--gold-strong), var(--gold));
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+    z-index: 4;
+  }
+  .brace.tl{ top:-3px; left:-3px; clip-path: polygon(0 0, 100% 0, 0 100%); }
+  .brace.tr{ top:-3px; right:-3px; clip-path: polygon(100% 0, 100% 100%, 0 0); }
+  .brace.bl{ bottom:-3px; left:-3px; clip-path: polygon(0 0, 0 100%, 100% 100%); }
+  .brace.br{ bottom:-3px; right:-3px; clip-path: polygon(100% 100%, 0 100%, 100% 0); }
+
+  #board{
+    display:grid;
+    border-radius: 2px;
+    overflow:hidden;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+  }
+  .cell{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    user-select:none;
+  }
+  .cell.light{ background: var(--board-light); }
+  .cell.dark{ background: var(--board-dark); }
+
+  .cell.corner::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background: radial-gradient(circle at 50% 50%, var(--gold) 0%, transparent 72%);
+    opacity: 0.55;
+    z-index:1;
+    animation: glow 2.6s ease-in-out infinite;
+    animation-play-state: var(--anim-play);
+  }
+  @keyframes glow{
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.78; }
+  }
+
+  .cell .queen{
+    position:relative;
+    z-index:3;
+    color: var(--garnet);
+    text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+    cursor:pointer;
+    transition: transform 0.12s ease;
+  }
+  .cell .queen.selected{ transform: scale(1.16); }
+
+  .cell.selected-cell::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    box-shadow: inset 0 0 0 3px var(--garnet);
+    z-index:2;
+  }
+
+  .cell.valid-move{ cursor:pointer; }
+  .cell.valid-move::after{
+    content:"";
+    position:absolute;
+    width: 32%;
+    height: 32%;
+    border-radius: 50%;
+    background: var(--verdigris);
+    opacity: 0.75;
+    z-index:2;
+  }
+
+  .cell.placement-zone{ cursor:pointer; }
+  .cell.placement-zone::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background: var(--sapphire);
+    opacity: 0.3;
+    z-index:2;
+    animation: pulse 1.7s ease-in-out infinite;
+    animation-play-state: var(--anim-play);
+  }
+  @keyframes pulse{
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.48; }
+  }
+
+  .legend{
+    display:flex;
+    gap: 18px;
+    flex-wrap:wrap;
+    justify-content:center;
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+  }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .dot.gold{ background: var(--gold); }
+  .dot.sapphire{ background: var(--sapphire); }
+  .dot.verdigris{ background: var(--verdigris); }
+
+  .ledger{
+    width: 250px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    box-shadow: 0 10px 26px var(--shadow);
+  }
+  .ledger h2{
+    margin: 0 0 14px;
+    font-size: 0.72rem;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--gold-strong);
+    font-weight: 700;
+  }
+  #newGameBtn{
+    display:block;
+    width:100%;
+    appearance:none;
+    border:none;
+    cursor:pointer;
+    padding: 11px 14px;
+    margin-bottom: 18px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #241a12;
+    background: linear-gradient(160deg, var(--gold-strong), var(--gold));
+    box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 14px var(--shadow);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  #newGameBtn:hover{ filter: brightness(1.05); }
+  #newGameBtn:active{
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 3px 8px var(--shadow);
+  }
+  #newGameBtn:focus-visible{
+    outline: 2px solid var(--sapphire);
+    outline-offset: 2px;
+  }
+
+  .rules-list{
+    margin:0;
+    padding-left: 1.15em;
+    font-size: 0.86rem;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+  .rules-list li{ margin-bottom: 8px; }
+  .rules-list li::marker{
+    color: var(--gold-strong);
+    font-weight: 700;
+  }
+  .rules-list b{ color: var(--ink); font-weight: 600; }
+
+  footer{
+    color: var(--ink-soft);
+    opacity: 0.75;
+    font-size: 0.76rem;
+    text-align:center;
+  }
+
+  @media (max-width: 660px){
+    .cabinet{ flex-direction:column; align-items:center; }
+    .ledger{ width: 100%; max-width: 360px; order: -1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <header class="masthead">
+    <p class="eyebrow">A Royal Pursuit</p>
+    <h1>Corner the Queen</h1>
+    <p class="subtitle">Two players. One queen. Whoever herds her into the corner wins.</p>
+  </header>
+
+  <div class="cabinet">
+
+    <div class="board-column">
+      <div class="plaque" id="status">Click New Game to begin</div>
+      <div class="frame">
+        <span class="brace tl"></span>
+        <span class="brace tr"></span>
+        <span class="brace bl"></span>
+        <span class="brace br"></span>
+        <div id="board"></div>
+      </div>
+      <div class="legend">
+        <span><i class="dot sapphire"></i> Starting zone</span>
+        <span><i class="dot gold"></i> Corner (target)</span>
+        <span><i class="dot verdigris"></i> Legal move</span>
+      </div>
+    </div>
+
+    <aside class="ledger">
+      <h2>How to Play</h2>
+      <button id="newGameBtn" type="button">New Game</button>
+      <ol class="rules-list">
+        <li>The board is <b>16 &times; 16</b>.</li>
+        <li><b>Player 1</b> places the queen anywhere in the glowing top row or right column.</li>
+        <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
+        <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
+      </ol>
+    </aside>
+
+  </div>
+
+  <footer>Corner the Queen &mdash; a two-player queen-cornering board game.</footer>
+
+</div>
+
+<script>
+(function(){
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+
+  const N = 16;
+  const cellSize = 30;
+
+  let qx = null, qy = null;
+  let phase = 'idle'; // 'idle' | 'placement' | 'playing' | 'over'
+  let currentPlayer = 1; // 1 or 2
+  let selected = false;
+
+  function isValidMove(fromX, fromY, toX, toY){
+    if (toX === fromX && toY === fromY) return false;
+    if (toX < 0 || toY < 0) return false;
+    if (toX === fromX && toY < fromY) return true;              // down
+    if (toY === fromY && toX < fromX) return true;               // left
+    const dx = fromX - toX, dy = fromY - toY;
+    if (dx > 0 && dx === dy) return true;                         // diagonal down-left
+    return false;
+  }
+
+  function isStartCell(x, y){
+    return x === N - 1 || y === N - 1;
+  }
+
+  function buildBoard(){
+    boardEl.innerHTML = '';
+    boardEl.style.gridTemplateColumns = `repeat(${N}, ${cellSize}px)`;
+    boardEl.style.gridTemplateRows = `repeat(${N}, ${cellSize}px)`;
+
+    for (let y = N - 1; y >= 0; y--){
+      for (let x = 0; x < N; x++){
+        const cell = document.createElement('div');
+        cell.className = 'cell ' + (((x + y) % 2 === 0) ? 'light' : 'dark');
+        cell.style.width = cellSize + 'px';
+        cell.style.height = cellSize + 'px';
+        cell.dataset.x = x;
+        cell.dataset.y = y;
+        if (x === 0 && y === 0) cell.classList.add('corner');
+        cell.addEventListener('click', onCellClick);
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  function cellAt(x, y){
+    return boardEl.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+  }
+
+  function render(){
+    boardEl.querySelectorAll('.cell').forEach(c => {
+      c.classList.remove('selected-cell', 'valid-move', 'placement-zone');
+      c.innerHTML = '';
+    });
+
+    if (phase === 'placement'){
+      for (let x = 0; x < N; x++){
+        for (let y = 0; y < N; y++){
+          if (!isStartCell(x, y)) continue;
+          const c = cellAt(x, y);
+          if (c) c.classList.add('placement-zone');
+        }
+      }
+      updateStatus();
+      return;
+    }
+
+    if (qx !== null && qy !== null){
+      const qCell = cellAt(qx, qy);
+      if (qCell){
+        const q = document.createElement('span');
+        q.className = 'queen' + (selected ? ' selected' : '');
+        q.textContent = '♛';
+        q.style.fontSize = (cellSize * 0.78) + 'px';
+        qCell.appendChild(q);
+        if (selected) qCell.classList.add('selected-cell');
+      }
+
+      if (selected && phase === 'playing'){
+        for (let x = 0; x <= qx; x++){
+          for (let y = 0; y <= qy; y++){
+            if (!isValidMove(qx, qy, x, y)) continue;
+            const c = cellAt(x, y);
+            if (!c) continue;
+            c.classList.add('valid-move');
+          }
+        }
+      }
+    }
+
+    updateStatus();
+  }
+
+  function updateStatus(){
+    statusEl.classList.remove('win', 'placing');
+    if (phase === 'placement'){
+      statusEl.classList.add('placing');
+      statusEl.textContent = `Player 1 — click a highlighted cell in the top row or right column to place the queen`;
+      return;
+    }
+    if (phase === 'over'){
+      statusEl.classList.add('win');
+      statusEl.textContent = `♛ Player ${currentPlayer} cornered the queen and wins!`;
+      return;
+    }
+    statusEl.textContent = `Player ${currentPlayer}'s turn — move the queen`;
+  }
+
+  function moveQueenTo(x, y){
+    qx = x; qy = y;
+    selected = false;
+    if (qx === 0 && qy === 0){
+      phase = 'over';
+      render();
+      return;
+    }
+    currentPlayer = currentPlayer === 1 ? 2 : 1;
+    render();
+  }
+
+  function placeQueenAt(x, y){
+    qx = x; qy = y;
+    phase = 'playing';
+    currentPlayer = 2;
+    render();
+  }
+
+  function onCellClick(e){
+    const cell = e.currentTarget;
+    const x = parseInt(cell.dataset.x, 10);
+    const y = parseInt(cell.dataset.y, 10);
+
+    if (phase === 'placement'){
+      if (isStartCell(x, y)) placeQueenAt(x, y);
+      return;
+    }
+
+    if (phase !== 'playing') return;
+
+    if (x === qx && y === qy){
+      selected = !selected;
+      render();
+      return;
+    }
+
+    if (selected && isValidMove(qx, qy, x, y)){
+      moveQueenTo(x, y);
+    }
+  }
+
+  function startNewGame(){
+    qx = null; qy = null;
+    currentPlayer = 1;
+    selected = false;
+    phase = 'placement';
+
+    buildBoard();
+    render();
+  }
+
+  document.getElementById('newGameBtn').addEventListener('click', startNewGame);
+
+  startNewGame();
+})();
+</script>
+
+</body>
+</html>
