@@ -155,6 +155,24 @@
     font-size: 0.82rem;
     font-family: "Segoe UI", system-ui, sans-serif;
   }
+  .field-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin: 4px 0 18px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+  .field-row select{
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
   .btn-primary, .btn-secondary{
     appearance:none;
     border:none;
@@ -201,12 +219,21 @@
   }
   .role-badge.host{ color: var(--garnet); }
   .role-badge.guest{ color: var(--sapphire); }
+  .role-badge.spectator{ color: var(--verdigris); }
+  .role-badge.active{
+    animation: badge-glow 1.4s ease-in-out infinite;
+    animation-play-state: var(--anim-play);
+  }
+  @keyframes badge-glow{
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50% { box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 22%, transparent); }
+  }
 
   #gameArea{
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 16px;
+    gap: 12px;
   }
 
   .cabinet{
@@ -221,7 +248,7 @@
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 14px;
+    gap: 10px;
   }
 
   .plaque{
@@ -239,6 +266,14 @@
   }
   .plaque.win{ color: var(--gold-strong); }
   .plaque.placing{ color: var(--sapphire); }
+
+  .scoreboard{
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.3px;
+    min-height: 1.1em;
+  }
 
   .frame{
     position:relative;
@@ -275,6 +310,11 @@
   }
   .cell.light{ background: var(--board-light); }
   .cell.dark{ background: var(--board-dark); }
+  .cell:focus-visible{
+    outline: 3px solid var(--sapphire);
+    outline-offset: -3px;
+    z-index: 5;
+  }
 
   .cell.corner::after{
     content:"";
@@ -337,6 +377,44 @@
     50% { opacity: 0.48; }
   }
 
+  #reactionLayer{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    overflow:visible;
+    z-index: 6;
+  }
+  .reaction-bubble{
+    position:absolute;
+    bottom: 10%;
+    font-size: 1.8rem;
+    animation: bubble-float 1.6s ease-out forwards;
+  }
+  @keyframes bubble-float{
+    0%{ transform: translateY(0) scale(0.6); opacity:0; }
+    15%{ transform: translateY(-10px) scale(1); opacity:1; }
+    100%{ transform: translateY(-90px) scale(1); opacity:0; }
+  }
+
+  .confetti-piece{
+    position:absolute;
+    top: 40%;
+    left: 50%;
+    width: 7px; height: 7px;
+    border-radius: 2px;
+    opacity: 0.95;
+    animation: confetti-fall 1.1s ease-out forwards;
+  }
+  @keyframes confetti-fall{
+    0%{ transform: translate(0,0) rotate(0deg); opacity:1; }
+    100%{ transform: translate(var(--dx), 200px) rotate(var(--rot)); opacity:0; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .reaction-bubble{ animation: none; opacity: 1; }
+    .confetti-piece{ display:none; }
+  }
+
   .legend{
     display:flex;
     gap: 18px;
@@ -352,7 +430,7 @@
   .dot.verdigris{ background: var(--verdigris); }
 
   .ledger{
-    width: 250px;
+    width: 260px;
     background: var(--panel-bg);
     border: 1px solid var(--panel-border);
     border-radius: 8px;
@@ -382,6 +460,50 @@
     font-weight: 700;
   }
   .rules-list b{ color: var(--ink); font-weight: 600; }
+
+  .reaction-row{
+    display:flex;
+    gap:6px;
+    margin-top: 18px;
+    flex-wrap:wrap;
+  }
+  .reaction-btn{
+    appearance:none;
+    border: 1px solid var(--panel-border);
+    background: var(--bg);
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 1rem;
+    cursor:pointer;
+    line-height:1;
+  }
+  .reaction-btn:hover{ filter: brightness(1.1); }
+  .reaction-btn:focus-visible{
+    outline: 2px solid var(--sapphire);
+    outline-offset: 2px;
+  }
+
+  .history-panel{ margin-top: 18px; }
+  .history-panel h3{
+    margin: 0 0 8px;
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--gold-strong);
+    font-weight: 700;
+  }
+  .history-list{
+    list-style:none;
+    margin:0; padding:0;
+    max-height: 130px;
+    overflow-y:auto;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    border-top: 1px solid var(--panel-border);
+    padding-top: 8px;
+  }
+  .history-list li{ padding: 1px 0; }
 
   footer{
     color: var(--ink-soft);
@@ -414,13 +536,15 @@
     <div class="cabinet">
 
       <div class="board-column">
-        <div class="plaque" id="status"></div>
+        <div class="plaque" id="status" aria-live="polite" aria-atomic="true"></div>
+        <div id="scoreboard" class="scoreboard"></div>
         <div class="frame">
           <span class="brace tl"></span>
           <span class="brace tr"></span>
           <span class="brace bl"></span>
           <span class="brace br"></span>
           <div id="board"></div>
+          <div id="reactionLayer"></div>
         </div>
         <div class="legend">
           <span><i class="dot sapphire"></i> Starting zone</span>
@@ -438,6 +562,11 @@
           <li>Players then alternate moving her any distance <b>left</b>, <b>down</b>, or <b>diagonally down-left</b>.</li>
           <li>Whoever moves the queen onto the <b>gold corner</b> wins.</li>
         </ol>
+        <div id="reactionRow" class="reaction-row"></div>
+        <div class="history-panel">
+          <h3>Move Log</h3>
+          <ul id="historyList" class="history-list"></ul>
+        </div>
       </aside>
 
     </div>
@@ -455,19 +584,32 @@
   const gameAreaEl = document.getElementById('gameArea');
   const roleBadgeEl = document.getElementById('roleBadge');
 
-  const N = 16;
-  const cellSize = 30;
   const ROOM_PREFIX = 'ctq-';
+  const REACTIONS = ['👍', '😮', '😅', '🎉', '😤'];
+  const SESSION_KEY = 'ctq_session';
+
+  let N = 16;
+  let cellSize = 30;
 
   let qx = null, qy = null;
   let phase = 'idle'; // 'idle' | 'placement' | 'playing' | 'over'
   let currentPlayer = 1; // 1 or 2
   let selected = false;
+  let moveHistory = [];
+  let scores = { 1: 0, 2: 0 };
+  let focusX = 0, focusY = 0;
+  let wasMyTurn = false;
+  let announcedOver = false;
+  let resumableSession = null;
 
   let peer = null;
   let conn = null;
-  let myPlayerNumber = null; // 1 = host, 2 = guest
+  let myPlayerNumber = null; // 1 = host, 2 = guest, 0 = spectator
+  let currentRoomId = null;
+  let spectatorConns = [];
   let connectTimeoutHandle = null;
+  let hostGraceTimeout = null;
+  let guestRetryCount = 0;
   let rejected = false; // set true if the room turned out to already be full
 
   // Public STUN + free TURN relay (openrelay.metered.ca) so the connection
@@ -494,22 +636,146 @@
     return s;
   }
 
+  function computeCellSize(){
+    const available = Math.min(window.innerWidth - 64, 560);
+    return Math.max(16, Math.floor(available / N));
+  }
+
+  // ---------- Sound / haptics / confetti ----------
+
+  let audioCtx = null;
+  function playTurnTone(){
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 660;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch(e){}
+    if (navigator.vibrate) { try { navigator.vibrate(80); } catch(e){} }
+  }
+
+  function triggerWinConfetti(){
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const layer = document.getElementById('reactionLayer');
+    if (!layer) return;
+    const colors = ['var(--gold)', 'var(--garnet)', 'var(--sapphire)', 'var(--verdigris)'];
+    for (let i = 0; i < 24; i++){
+      const p = document.createElement('span');
+      p.className = 'confetti-piece';
+      p.style.left = (40 + Math.random() * 20) + '%';
+      p.style.background = colors[i % colors.length];
+      p.style.setProperty('--dx', (Math.random() * 200 - 100) + 'px');
+      p.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+      p.style.animationDelay = (Math.random() * 0.15) + 's';
+      layer.appendChild(p);
+      setTimeout(() => p.remove(), 1400);
+    }
+  }
+
+  function showReactionBubble(emoji){
+    const layer = document.getElementById('reactionLayer');
+    if (!layer) return;
+    const bubble = document.createElement('div');
+    bubble.className = 'reaction-bubble';
+    bubble.textContent = emoji;
+    bubble.style.left = (30 + Math.random() * 40) + '%';
+    layer.appendChild(bubble);
+    setTimeout(() => bubble.remove(), 1600);
+  }
+
+  function sendReaction(emoji){
+    showReactionBubble(emoji);
+    sendMsg({ type: 'reaction', emoji });
+  }
+
+  function buildReactionButtons(){
+    const row = document.getElementById('reactionRow');
+    if (!row) return;
+    if (myPlayerNumber === 0){ row.style.display = 'none'; return; }
+    row.style.display = 'flex';
+    row.innerHTML = REACTIONS.map(e => `<button type="button" class="reaction-btn" data-emoji="${e}" aria-label="Send ${e} reaction">${e}</button>`).join('');
+    row.querySelectorAll('.reaction-btn').forEach(btn => {
+      btn.addEventListener('click', () => sendReaction(btn.dataset.emoji));
+    });
+  }
+
+  // ---------- Local persistence (resume after refresh) ----------
+
+  function saveSession(){
+    if (myPlayerNumber !== 1 || !currentRoomId || phase === 'idle') return;
+    try{
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        role: 'host', roomId: currentRoomId, N, qx, qy, phase, currentPlayer, moveHistory, scores, ts: Date.now()
+      }));
+    } catch(e){}
+  }
+
+  function loadResumableSession(){
+    try{
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const saved = JSON.parse(raw);
+      if (!saved || saved.role !== 'host' || !saved.roomId) return null;
+      if (!saved.phase || saved.phase === 'idle') return null;
+      if (Date.now() - (saved.ts || 0) > 60 * 60 * 1000) return null;
+      return saved;
+    } catch(e){ return null; }
+  }
+
   // ---------- Networking ----------
 
   function sendMsg(msg){
     if (conn && conn.open) conn.send(msg);
+    if (myPlayerNumber === 1) broadcastToSpectators(msg);
   }
 
-  function setupConnection(){
-    conn.on('data', applyRemote);
-    conn.on('close', onOpponentLeft);
-    conn.on('error', () => onOpponentLeft());
+  function broadcastToSpectators(msg){
+    spectatorConns.forEach(c => { if (c.open) c.send(msg); });
+  }
+
+  function buildSyncPayload(){
+    return { type: 'sync', N, qx, qy, phase, currentPlayer, moveHistory, scores };
+  }
+
+  function setupPrimaryConnection(){
+    conn.on('data', msg => {
+      applyRemote(msg);
+      if (myPlayerNumber === 1) broadcastToSpectators(msg);
+    });
+    conn.on('close', () => {
+      if (rejected) return;
+      if (myPlayerNumber === 1) startHostGrace();
+      else attemptGuestReconnect();
+    });
+    conn.on('error', () => {
+      if (rejected) return;
+      if (myPlayerNumber === 1) startHostGrace();
+      else attemptGuestReconnect();
+    });
   }
 
   function applyRemote(msg){
     if (msg.type === 'place') placeQueenAt(msg.x, msg.y, false);
     else if (msg.type === 'move') moveQueenTo(msg.x, msg.y, false);
-    else if (msg.type === 'newgame') startNewGame(false);
+    else if (msg.type === 'reaction') showReactionBubble(msg.emoji);
+    else if (msg.type === 'sync'){
+      N = msg.N || 16;
+      qx = msg.qx; qy = msg.qy; phase = msg.phase; currentPlayer = msg.currentPlayer || 1;
+      moveHistory = Array.isArray(msg.moveHistory) ? msg.moveHistory.slice() : [];
+      scores = msg.scores && typeof msg.scores === 'object' ? Object.assign({ 1: 0, 2: 0 }, msg.scores) : { 1: 0, 2: 0 };
+      selected = false;
+      buildBoard();
+      render();
+      renderHistory();
+      renderScoreboard();
+    }
     else if (msg.type === 'room-full'){
       rejected = true;
       clearConnectTimeout();
@@ -518,10 +784,10 @@
     }
   }
 
-  function onOpponentLeft(){
-    if (rejected) return; // already showing the more accurate "room full" message
-    gameAreaEl.style.display = 'none';
-    renderLobby('opponent-left');
+  function acceptSpectator(c){
+    spectatorConns.push(c);
+    c.on('open', () => { c.send(buildSyncPayload()); });
+    c.on('close', () => { spectatorConns = spectatorConns.filter(x => x !== c); });
   }
 
   function startConnectTimeout(){
@@ -539,15 +805,54 @@
     }
   }
 
-  function initHost(){
-    myPlayerNumber = 1;
-    const roomId = ROOM_PREFIX + randomRoomSuffix(6);
-    peer = new Peer(roomId, { config: ICE_CONFIG });
+  function startHostGrace(){
+    statusEl.classList.add('placing');
+    statusEl.textContent = 'Your opponent disconnected — waiting for them to reconnect…';
+    clearTimeout(hostGraceTimeout);
+    hostGraceTimeout = setTimeout(() => {
+      gameAreaEl.style.display = 'none';
+      renderLobby('opponent-left');
+    }, 45000);
+  }
 
-    peer.on('open', id => {
-      renderLobby('hosting-waiting', id);
+  function attemptGuestReconnect(){
+    gameAreaEl.style.display = 'none';
+    renderLobby('reconnecting');
+    guestRetryCount = 0;
+    tryReconnectOnce();
+  }
+
+  function tryReconnectOnce(){
+    guestRetryCount++;
+    if (guestRetryCount > 6){
+      renderLobby('opponent-left');
+      return;
+    }
+    const roleMeta = myPlayerNumber === 0 ? 'spectator' : 'guest';
+    conn = peer.connect(currentRoomId, { reliable: true, metadata: { role: roleMeta } });
+    setupPrimaryConnection();
+    let settled = false;
+    conn.on('open', () => {
+      settled = true;
+      renderLobby('connected');
+      setTimeout(() => {
+        if (rejected) return;
+        lobbyEl.style.display = 'none';
+        gameAreaEl.style.display = 'flex';
+      }, 400);
     });
+    setTimeout(() => {
+      if (!settled) tryReconnectOnce();
+    }, 3000);
+  }
+
+  function attachHostConnectionHandler(){
     peer.on('connection', c => {
+      const role = c.metadata && c.metadata.role;
+      if (role === 'spectator'){
+        acceptSpectator(c);
+        return;
+      }
       if (conn && conn.open){
         c.on('open', () => {
           c.send({ type: 'room-full' });
@@ -555,8 +860,10 @@
         });
         return;
       }
+      clearTimeout(hostGraceTimeout);
+      hostGraceTimeout = null;
       conn = c;
-      setupConnection();
+      setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
         clearConnectTimeout();
@@ -566,21 +873,94 @@
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
-          startNewGame(true);
+          if (phase === 'idle'){
+            startNewGame(true);
+          } else {
+            buildBoard();
+            render();
+            renderHistory();
+            renderScoreboard();
+            sendMsg(buildSyncPayload());
+          }
+        }, 500);
+      });
+    });
+  }
+
+  function initHost(){
+    myPlayerNumber = 1;
+    const roomId = ROOM_PREFIX + randomRoomSuffix(6);
+    currentRoomId = roomId;
+    peer = new Peer(roomId, { config: ICE_CONFIG });
+
+    peer.on('open', id => renderLobby('hosting-waiting', id));
+    attachHostConnectionHandler();
+    peer.on('error', err => { clearConnectTimeout(); renderLobby('error', err && err.message); });
+  }
+
+  function resumeHost(saved){
+    myPlayerNumber = 1;
+    currentRoomId = saved.roomId;
+    N = saved.N || 16;
+    qx = saved.qx; qy = saved.qy; phase = saved.phase; currentPlayer = saved.currentPlayer || 1;
+    moveHistory = Array.isArray(saved.moveHistory) ? saved.moveHistory : [];
+    scores = saved.scores && typeof saved.scores === 'object' ? saved.scores : { 1: 0, 2: 0 };
+    selected = false;
+    wasMyTurn = false;
+    announcedOver = false;
+
+    lobbyEl.style.display = 'none';
+    gameAreaEl.style.display = 'flex';
+    setRoleBadge();
+    buildBoard();
+    render();
+    renderHistory();
+    renderScoreboard();
+    statusEl.classList.add('placing');
+    statusEl.textContent = 'Resuming your previous game — waiting for your opponent to rejoin…';
+
+    peer = new Peer(saved.roomId, { config: ICE_CONFIG });
+    peer.on('open', () => {});
+    attachHostConnectionHandler();
+    peer.on('error', err => {
+      gameAreaEl.style.display = 'none';
+      renderLobby('error', (err && err.message) || 'Could not resume this game — try creating a new one.');
+    });
+  }
+
+  function initGuest(roomId){
+    myPlayerNumber = 2;
+    currentRoomId = roomId;
+    peer = new Peer({ config: ICE_CONFIG });
+
+    peer.on('open', () => {
+      renderLobby('joining');
+      conn = peer.connect(roomId, { reliable: true, metadata: { role: 'guest' } });
+      setupPrimaryConnection();
+      startConnectTimeout();
+      conn.on('open', () => {
+        clearConnectTimeout();
+        renderLobby('connected');
+        setTimeout(() => {
+          if (rejected) return;
+          lobbyEl.style.display = 'none';
+          gameAreaEl.style.display = 'flex';
+          setRoleBadge();
         }, 500);
       });
     });
     peer.on('error', err => { clearConnectTimeout(); renderLobby('error', err && err.message); });
   }
 
-  function initGuest(roomId){
-    myPlayerNumber = 2;
+  function initSpectator(roomId){
+    myPlayerNumber = 0;
+    currentRoomId = roomId;
     peer = new Peer({ config: ICE_CONFIG });
 
     peer.on('open', () => {
       renderLobby('joining');
-      conn = peer.connect(roomId, { reliable: true });
-      setupConnection();
+      conn = peer.connect(roomId, { reliable: true, metadata: { role: 'spectator' } });
+      setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
         clearConnectTimeout();
@@ -600,45 +980,82 @@
     if (myPlayerNumber === 1){
       roleBadgeEl.className = 'role-badge host';
       roleBadgeEl.textContent = 'You are Player 1 — Host';
-    } else {
+    } else if (myPlayerNumber === 2){
       roleBadgeEl.className = 'role-badge guest';
       roleBadgeEl.textContent = 'You are Player 2 — Guest';
+    } else {
+      roleBadgeEl.className = 'role-badge spectator';
+      roleBadgeEl.textContent = 'You are Spectating';
     }
+    buildReactionButtons();
   }
 
   // ---------- Lobby UI ----------
 
+  function copyToClipboard(text, btnId){
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { if (btn) btn.textContent = original; }, 1500);
+    });
+  }
+
   function renderLobby(state, extra){
     if (state === 'choose'){
+      const resumeBtn = resumableSession
+        ? `<button id="resumeBtn" class="btn-secondary" type="button" style="width:100%; margin-bottom:10px;">Resume Previous Game</button>`
+        : '';
       lobbyEl.innerHTML = `
         <p class="lobby-text">Start a match and send the link to a friend anywhere &mdash; their browser connects straight to yours, no accounts needed.</p>
+        <div class="field-row">
+          <label for="boardSizeSelect">Board size</label>
+          <select id="boardSizeSelect">
+            <option value="8">8 &times; 8</option>
+            <option value="12">12 &times; 12</option>
+            <option value="16" selected>16 &times; 16</option>
+            <option value="20">20 &times; 20</option>
+          </select>
+        </div>
+        ${resumeBtn}
         <button id="createBtn" class="btn-primary" type="button">Create Game</button>
       `;
-      document.getElementById('createBtn').addEventListener('click', initHost);
+      document.getElementById('createBtn').addEventListener('click', () => {
+        N = parseInt(document.getElementById('boardSizeSelect').value, 10) || 16;
+        initHost();
+      });
+      if (resumableSession){
+        document.getElementById('resumeBtn').addEventListener('click', () => resumeHost(resumableSession));
+      }
       return;
     }
     if (state === 'hosting-waiting'){
       const link = location.origin + location.pathname + '?room=' + extra;
+      const spectateLink = link + '&spectate=1';
       lobbyEl.innerHTML = `
         <p class="lobby-text">Send this link to your opponent:</p>
         <div class="room-link-row">
           <input id="roomLinkInput" class="room-link" type="text" readonly value="${escapeHtml(link)}">
           <button id="copyBtn" class="btn-secondary" type="button">Copy</button>
         </div>
+        <p class="lobby-text" style="margin-top:6px;">Or invite someone to watch only:</p>
+        <div class="room-link-row">
+          <input id="spectateLinkInput" class="room-link" type="text" readonly value="${escapeHtml(spectateLink)}">
+          <button id="copySpectateBtn" class="btn-secondary" type="button">Copy</button>
+        </div>
         <p class="lobby-status">Waiting for opponent to join&hellip;</p>
       `;
-      document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(link).then(() => {
-          const btn = document.getElementById('copyBtn');
-          if (!btn) return;
-          btn.textContent = 'Copied!';
-          setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 1500);
-        });
-      });
+      document.getElementById('copyBtn').addEventListener('click', () => copyToClipboard(link, 'copyBtn'));
+      document.getElementById('copySpectateBtn').addEventListener('click', () => copyToClipboard(spectateLink, 'copySpectateBtn'));
       return;
     }
     if (state === 'joining'){
       lobbyEl.innerHTML = `<p class="lobby-status">Connecting to your opponent&hellip;</p>`;
+      return;
+    }
+    if (state === 'reconnecting'){
+      lobbyEl.innerHTML = `<p class="lobby-status">Reconnecting to your opponent&hellip;</p>`;
       return;
     }
     if (state === 'connected'){
@@ -681,8 +1098,11 @@
 
   function buildBoard(){
     boardEl.innerHTML = '';
+    cellSize = computeCellSize();
     boardEl.style.gridTemplateColumns = `repeat(${N}, ${cellSize}px)`;
     boardEl.style.gridTemplateRows = `repeat(${N}, ${cellSize}px)`;
+    boardEl.setAttribute('role', 'grid');
+    boardEl.setAttribute('aria-label', N + ' by ' + N + ' game board');
 
     for (let y = N - 1; y >= 0; y--){
       for (let x = 0; x < N; x++){
@@ -692,16 +1112,52 @@
         cell.style.height = cellSize + 'px';
         cell.dataset.x = x;
         cell.dataset.y = y;
-        if (x === 0 && y === 0) cell.classList.add('corner');
+        cell.setAttribute('role', 'gridcell');
+        cell.tabIndex = -1;
+        let label = 'Row ' + (N - y) + ', Column ' + (x + 1);
+        if (x === 0 && y === 0){ cell.classList.add('corner'); label += ', corner'; }
+        else if (isStartCell(x, y)) label += ', starting zone';
+        cell.setAttribute('aria-label', label);
         cell.addEventListener('click', onCellClick);
         boardEl.appendChild(cell);
       }
     }
+
+    focusX = Math.min(focusX, N - 1);
+    focusY = Math.min(focusY, N - 1);
+    const focusCell = cellAt(focusX, focusY);
+    if (focusCell) focusCell.tabIndex = 0;
   }
 
   function cellAt(x, y){
     return boardEl.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
   }
+
+  function moveFocus(x, y){
+    const old = cellAt(focusX, focusY);
+    if (old) old.tabIndex = -1;
+    focusX = x; focusY = y;
+    const cell = cellAt(focusX, focusY);
+    if (cell){ cell.tabIndex = 0; cell.focus(); }
+  }
+
+  function onBoardKeyDown(e){
+    const active = document.activeElement;
+    if (!active || !active.classList || !active.classList.contains('cell')) return;
+    let dx = 0, dy = 0;
+    if (e.key === 'ArrowLeft') dx = -1;
+    else if (e.key === 'ArrowRight') dx = 1;
+    else if (e.key === 'ArrowUp') dy = 1;
+    else if (e.key === 'ArrowDown') dy = -1;
+    else if (e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      handleCellActivate(focusX, focusY);
+      return;
+    } else return;
+    e.preventDefault();
+    moveFocus(Math.min(N - 1, Math.max(0, focusX + dx)), Math.min(N - 1, Math.max(0, focusY + dy)));
+  }
+  boardEl.addEventListener('keydown', onBoardKeyDown);
 
   function render(){
     boardEl.querySelectorAll('.cell').forEach(c => {
@@ -718,6 +1174,7 @@
         }
       }
       updateStatus();
+      saveSession();
       return;
     }
 
@@ -745,40 +1202,74 @@
     }
 
     updateStatus();
+    saveSession();
   }
 
   function updateStatus(){
     statusEl.classList.remove('win', 'placing');
+    let text;
     if (phase === 'placement'){
       statusEl.classList.add('placing');
-      statusEl.textContent = myPlayerNumber === 1
+      text = myPlayerNumber === 1
         ? 'Your turn — click a highlighted cell in the top row or right column to place the queen'
         : 'Waiting for the host to place the queen…';
-      return;
-    }
-    if (phase === 'over'){
+    } else if (phase === 'over'){
       statusEl.classList.add('win');
-      statusEl.textContent = currentPlayer === myPlayerNumber
-        ? '♛ You cornered the queen — you win!'
-        : '♛ Your opponent cornered the queen and wins!';
-      return;
+      if (myPlayerNumber === 0) text = `♛ Player ${currentPlayer} cornered the queen and wins!`;
+      else text = currentPlayer === myPlayerNumber ? '♛ You cornered the queen — you win!' : '♛ Your opponent cornered the queen and wins!';
+    } else {
+      if (myPlayerNumber === 0) text = `Player ${currentPlayer}'s turn`;
+      else text = currentPlayer === myPlayerNumber ? 'Your turn — move the queen' : "Opponent's turn — waiting…";
     }
-    statusEl.textContent = currentPlayer === myPlayerNumber
-      ? 'Your turn — move the queen'
-      : "Opponent's turn — waiting…";
+    statusEl.textContent = text;
+
+    const isMyTurnNow = (myPlayerNumber === 1 && phase === 'placement') || (phase === 'playing' && currentPlayer === myPlayerNumber);
+    if (isMyTurnNow && !wasMyTurn) playTurnTone();
+    wasMyTurn = isMyTurnNow;
+
+    if (phase === 'over' && !announcedOver){
+      announcedOver = true;
+      triggerWinConfetti();
+    }
+    if (phase !== 'over') announcedOver = false;
+
+    if (roleBadgeEl) roleBadgeEl.classList.toggle('active', isMyTurnNow);
+  }
+
+  function renderHistory(){
+    const el = document.getElementById('historyList');
+    if (!el) return;
+    el.innerHTML = moveHistory.map(m => {
+      const verb = m.type === 'place' ? 'placed the queen at' : 'moved to';
+      return `<li>Player ${m.player} ${verb} (${m.x}, ${m.y})</li>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderScoreboard(){
+    const el = document.getElementById('scoreboard');
+    if (!el) return;
+    el.textContent = `Player 1 — ${scores[1] || 0}      Player 2 — ${scores[2] || 0}`;
   }
 
   function moveQueenTo(x, y, broadcast){
+    const mover = currentPlayer;
     qx = x; qy = y;
     selected = false;
+    moveHistory.push({ player: mover, type: 'move', x, y });
+
     if (qx === 0 && qy === 0){
       phase = 'over';
+      scores[mover] = (scores[mover] || 0) + 1;
       render();
+      renderHistory();
+      renderScoreboard();
       if (broadcast) sendMsg({ type: 'move', x, y });
       return;
     }
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     render();
+    renderHistory();
     if (broadcast) sendMsg({ type: 'move', x, y });
   }
 
@@ -786,16 +1277,15 @@
     qx = x; qy = y;
     phase = 'playing';
     currentPlayer = 2;
+    moveHistory.push({ player: 1, type: 'place', x, y });
     render();
+    renderHistory();
     if (broadcast) sendMsg({ type: 'place', x, y });
   }
 
-  function onCellClick(e){
+  function handleCellActivate(x, y){
     if (!conn || !conn.open) return;
-
-    const cell = e.currentTarget;
-    const x = parseInt(cell.dataset.x, 10);
-    const y = parseInt(cell.dataset.y, 10);
+    if (myPlayerNumber === 0) return; // spectators are read-only
 
     if (phase === 'placement'){
       if (myPlayerNumber !== 1) return;
@@ -817,25 +1307,44 @@
     }
   }
 
+  function onCellClick(e){
+    const cell = e.currentTarget;
+    const x = parseInt(cell.dataset.x, 10);
+    const y = parseInt(cell.dataset.y, 10);
+    moveFocus(x, y);
+    handleCellActivate(x, y);
+  }
+
   function startNewGame(broadcast){
     qx = null; qy = null;
     currentPlayer = 1;
     selected = false;
     phase = 'placement';
+    moveHistory = [];
+    wasMyTurn = false;
+    announcedOver = false;
 
     buildBoard();
     render();
-    if (broadcast) sendMsg({ type: 'newgame' });
+    renderHistory();
+    renderScoreboard();
+    if (broadcast) sendMsg(buildSyncPayload());
   }
 
   document.getElementById('newGameBtn').addEventListener('click', () => startNewGame(true));
 
   // ---------- Boot ----------
 
-  const roomParam = new URLSearchParams(location.search).get('room');
-  if (roomParam){
+  const params = new URLSearchParams(location.search);
+  const roomParam = params.get('room');
+  const isSpectateParam = params.get('spectate') === '1';
+
+  if (roomParam && isSpectateParam){
+    initSpectator(roomParam);
+  } else if (roomParam){
     initGuest(roomParam);
   } else {
+    resumableSession = loadResumableSession();
     renderLobby('choose');
   }
 })();
