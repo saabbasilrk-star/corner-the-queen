@@ -268,6 +268,8 @@
     flex-direction:column;
     align-items:center;
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .plaque{
@@ -300,6 +302,8 @@
     border-radius: 6px;
     background: linear-gradient(150deg, var(--board-dark), var(--panel-border) 130%);
     box-shadow: 0 24px 46px var(--shadow), inset 0 0 0 1px rgba(0,0,0,0.28);
+    max-width: calc(100vw - 40px); /* .stage has 20px horizontal padding on each side */
+    overflow-x: auto;
   }
   .brace{
     position:absolute;
