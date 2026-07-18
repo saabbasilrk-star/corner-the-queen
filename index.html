@@ -314,7 +314,30 @@
   .brace.bl{ bottom:-3px; left:-3px; clip-path: polygon(0 0, 0 100%, 100% 100%); }
   .brace.br{ bottom:-3px; right:-3px; clip-path: polygon(100% 100%, 0 100%, 100% 0); }
 
+  .frame-grid{
+    display:grid;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto auto;
+    gap: 4px;
+    align-items: stretch;
+    justify-items: stretch;
+  }
+  .rank-labels{ grid-column: 1; grid-row: 1; display:grid; }
+  .corner-spacer{ grid-column: 1; grid-row: 2; }
+  .file-labels{ grid-column: 2; grid-row: 2; display:grid; grid-auto-flow: column; }
+  .coord-label{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+  }
+
   #board{
+    grid-column: 2;
+    grid-row: 1;
     display:grid;
     border-radius: 2px;
     overflow:hidden;
@@ -531,6 +554,36 @@
     text-align:center;
   }
 
+  .modal-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 10, 6, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  .modal-card{
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 26px 28px;
+    max-width: 340px;
+    width: 100%;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .modal-title{
+    margin: 0 0 6px;
+    font-size: 0.96rem;
+    font-weight: 600;
+    color: var(--ink);
+    text-align:center;
+  }
+
   .records-card{
     width: 100%;
     max-width: 760px;
@@ -635,7 +688,12 @@
           <span class="brace tr"></span>
           <span class="brace bl"></span>
           <span class="brace br"></span>
-          <div id="board"></div>
+          <div class="frame-grid">
+            <div id="rankLabels" class="rank-labels"></div>
+            <div id="board"></div>
+            <div class="corner-spacer"></div>
+            <div id="fileLabels" class="file-labels"></div>
+          </div>
           <div id="reactionLayer"></div>
         </div>
         <div class="legend">
@@ -662,6 +720,15 @@
         </div>
       </aside>
 
+    </div>
+  </div>
+
+  <div id="placerModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <p class="modal-title">Who places the queen this game?</p>
+      <button id="placerChooseMe" class="btn-primary" type="button"></button>
+      <button id="placerChooseOpponent" class="btn-primary" type="button"></button>
+      <button id="placerCancel" class="btn-secondary" type="button" style="width:100%;">Cancel</button>
     </div>
   </div>
 
@@ -974,17 +1041,19 @@
   }
 
   function setupPrimaryConnection(){
-    conn.on('data', msg => {
+    const myConn = conn; // capture so stale handlers from a replaced/superseded connection can detect they're obsolete
+    myConn.on('data', msg => {
+      if (conn !== myConn) return;
       applyRemote(msg);
       if (myPlayerNumber === 1) broadcastToSpectators(msg);
     });
-    conn.on('close', () => {
-      if (rejected) return;
+    myConn.on('close', () => {
+      if (conn !== myConn || rejected) return;
       if (myPlayerNumber === 1) startHostGrace();
       else attemptGuestReconnect();
     });
-    conn.on('error', () => {
-      if (rejected) return;
+    myConn.on('error', () => {
+      if (conn !== myConn || rejected) return;
       if (myPlayerNumber === 1) startHostGrace();
       else attemptGuestReconnect();
     });
@@ -1061,13 +1130,15 @@
     }
     const roleMeta = myPlayerNumber === 0 ? 'spectator' : 'guest';
     conn = peer.connect(currentRoomId, { reliable: true, metadata: { role: roleMeta, name: myName } });
+    const myConn = conn;
     setupPrimaryConnection();
     let settled = false;
     conn.on('open', () => {
+      if (conn !== myConn) return;
       settled = true;
       renderLobby('connected');
       setTimeout(() => {
-        if (rejected) return;
+        if (conn !== myConn || rejected) return;
         lobbyEl.style.display = 'none';
         gameAreaEl.style.display = 'flex';
       }, 400);
@@ -1094,15 +1165,17 @@
       clearTimeout(hostGraceTimeout);
       hostGraceTimeout = null;
       conn = c;
+      const myConn = conn;
       const incomingName = c.metadata && c.metadata.name ? String(c.metadata.name).trim().slice(0, 24) : '';
       playerNames[2] = incomingName || 'Player 2';
       setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
+        if (conn !== myConn) return;
         clearConnectTimeout();
         renderLobby('connected');
         setTimeout(() => {
-          if (rejected) return;
+          if (conn !== myConn || rejected) return;
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
@@ -1174,13 +1247,15 @@
     peer.on('open', () => {
       renderLobby('joining');
       conn = peer.connect(roomId, { reliable: true, metadata: { role: 'guest', name: myName } });
+      const myConn = conn;
       setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
+        if (conn !== myConn) return;
         clearConnectTimeout();
         renderLobby('connected');
         setTimeout(() => {
-          if (rejected) return;
+          if (conn !== myConn || rejected) return;
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
@@ -1198,13 +1273,15 @@
     peer.on('open', () => {
       renderLobby('joining');
       conn = peer.connect(roomId, { reliable: true, metadata: { role: 'spectator' } });
+      const myConn = conn;
       setupPrimaryConnection();
       startConnectTimeout();
       conn.on('open', () => {
+        if (conn !== myConn) return;
         clearConnectTimeout();
         renderLobby('connected');
         setTimeout(() => {
-          if (rejected) return;
+          if (conn !== myConn || rejected) return;
           lobbyEl.style.display = 'none';
           gameAreaEl.style.display = 'flex';
           setRoleBadge();
@@ -1225,6 +1302,8 @@
       roleBadgeEl.className = 'role-badge spectator';
       roleBadgeEl.textContent = 'You are Spectating';
     }
+    const newGameBtn = document.getElementById('newGameBtn');
+    if (newGameBtn) newGameBtn.style.display = myPlayerNumber === 0 ? 'none' : 'block';
     buildReactionButtons();
   }
 
@@ -1361,6 +1440,37 @@
     return x === N - 1 || y === N - 1;
   }
 
+  function toNotation(x, y){
+    return String.fromCharCode(65 + x) + (y + 1);
+  }
+
+  function buildCoordinateLabels(){
+    const fileEl = document.getElementById('fileLabels');
+    const rankEl = document.getElementById('rankLabels');
+    if (fileEl){
+      fileEl.style.gridTemplateColumns = `repeat(${N}, ${cellSize}px)`;
+      fileEl.innerHTML = '';
+      for (let x = 0; x < N; x++){
+        const d = document.createElement('div');
+        d.className = 'coord-label';
+        d.style.width = cellSize + 'px';
+        d.textContent = String.fromCharCode(65 + x);
+        fileEl.appendChild(d);
+      }
+    }
+    if (rankEl){
+      rankEl.style.gridTemplateRows = `repeat(${N}, ${cellSize}px)`;
+      rankEl.innerHTML = '';
+      for (let y = N - 1; y >= 0; y--){
+        const d = document.createElement('div');
+        d.className = 'coord-label';
+        d.style.height = cellSize + 'px';
+        d.textContent = String(y + 1);
+        rankEl.appendChild(d);
+      }
+    }
+  }
+
   function buildBoard(){
     boardEl.innerHTML = '';
     cellSize = computeCellSize();
@@ -1379,7 +1489,7 @@
         cell.dataset.y = y;
         cell.setAttribute('role', 'gridcell');
         cell.tabIndex = -1;
-        let label = 'Row ' + (N - y) + ', Column ' + (x + 1);
+        let label = toNotation(x, y);
         if (x === 0 && y === 0){ cell.classList.add('corner'); label += ', corner'; }
         else if (isStartCell(x, y)) label += ', starting zone';
         cell.setAttribute('aria-label', label);
@@ -1387,6 +1497,8 @@
         boardEl.appendChild(cell);
       }
     }
+
+    buildCoordinateLabels();
 
     focusX = Math.min(focusX, N - 1);
     focusY = Math.min(focusY, N - 1);
@@ -1510,7 +1622,7 @@
     if (!el) return;
     el.innerHTML = moveHistory.map(m => {
       const verb = m.type === 'place' ? 'placed the queen at' : 'moved to';
-      return `<li>${escapeHtml(nameFor(m.player))} ${verb} (${m.x}, ${m.y})</li>`;
+      return `<li>${escapeHtml(nameFor(m.player))} ${verb} ${toNotation(m.x, m.y)}</li>`;
     }).join('');
     el.scrollTop = el.scrollHeight;
   }
@@ -1609,13 +1721,40 @@
     if (broadcast) sendMsg(buildSyncPayload());
   }
 
-  function startNewGame(broadcast){
-    placingPlayer = placingPlayer === 1 ? 2 : 1; // alternate who places each new game
+  function startNewGame(broadcast, chosenPlacer){
+    placingPlayer = chosenPlacer === 1 || chosenPlacer === 2
+      ? chosenPlacer
+      : (placingPlayer === 1 ? 2 : 1); // fallback: alternate if no explicit choice given
     resetBoardState();
     if (broadcast) sendMsg(buildSyncPayload());
   }
 
-  document.getElementById('newGameBtn').addEventListener('click', () => startNewGame(true));
+  function openPlacerChoice(){
+    document.getElementById('placerChooseMe').textContent = 'You place first';
+    document.getElementById('placerChooseOpponent').textContent = `${opponentName()} places first`;
+    document.getElementById('placerModal').style.display = 'flex';
+  }
+
+  function closePlacerChoice(){
+    document.getElementById('placerModal').style.display = 'none';
+  }
+
+  document.getElementById('newGameBtn').addEventListener('click', () => {
+    if (myPlayerNumber === 0) return; // spectators can't restart the game
+    openPlacerChoice();
+  });
+  document.getElementById('placerChooseMe').addEventListener('click', () => {
+    closePlacerChoice();
+    startNewGame(true, myPlayerNumber);
+  });
+  document.getElementById('placerChooseOpponent').addEventListener('click', () => {
+    closePlacerChoice();
+    startNewGame(true, myPlayerNumber === 1 ? 2 : 1);
+  });
+  document.getElementById('placerCancel').addEventListener('click', closePlacerChoice);
+  document.getElementById('placerModal').addEventListener('click', (e) => {
+    if (e.target.id === 'placerModal') closePlacerChoice();
+  });
 
   // ---------- Boot ----------
 
