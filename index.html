@@ -789,6 +789,7 @@
   let connectTimeoutHandle = null;
   let hostGraceTimeout = null;
   let guestRetryCount = 0;
+  let connectAttempt = 0;
   let rejected = false; // set true if the room turned out to already be full
 
   // Public STUN + free TURN relay (openrelay.metered.ca) so the connection
@@ -1090,11 +1091,15 @@
     c.on('close', () => { spectatorConns = spectatorConns.filter(x => x !== c); });
   }
 
-  function startConnectTimeout(){
+  function startConnectTimeout(onTimeout){
     clearConnectTimeout();
     connectTimeoutHandle = setTimeout(() => {
-      renderLobby('error', "Connection timed out. This can happen on some mobile or public wifi networks — try again, or switch one player to a different network.");
-      if (peer) peer.destroy();
+      if (onTimeout){
+        onTimeout();
+      } else {
+        renderLobby('error', "Connection timed out. This can happen on some mobile or public wifi networks — try again, or switch one player to a different network.");
+        if (peer) peer.destroy();
+      }
     }, 20000);
   }
 
@@ -1238,18 +1243,31 @@
     });
   }
 
+  const CONNECT_TIMEOUT_MSG = "Connection timed out. This can happen on some mobile or public wifi networks — try again, or switch one player to a different network.";
+
   function initGuest(roomId){
     myPlayerNumber = 2;
     currentRoomId = roomId;
     playerNames[2] = myName || 'Player 2';
+    connectAttempt = 0;
+    attemptGuestConnect(roomId);
+  }
+
+  function attemptGuestConnect(roomId){
+    connectAttempt++;
     peer = new Peer({ config: ICE_CONFIG });
 
     peer.on('open', () => {
-      renderLobby('joining');
+      renderLobby(connectAttempt > 1 ? 'joining-retry' : 'joining');
       conn = peer.connect(roomId, { reliable: true, metadata: { role: 'guest', name: myName } });
       const myConn = conn;
       setupPrimaryConnection();
-      startConnectTimeout();
+      startConnectTimeout(() => {
+        if (conn !== myConn) return;
+        if (peer) peer.destroy();
+        if (connectAttempt < 2) attemptGuestConnect(roomId);
+        else renderLobby('error', CONNECT_TIMEOUT_MSG);
+      });
       conn.on('open', () => {
         if (conn !== myConn) return;
         clearConnectTimeout();
@@ -1268,14 +1286,25 @@
   function initSpectator(roomId){
     myPlayerNumber = 0;
     currentRoomId = roomId;
+    connectAttempt = 0;
+    attemptSpectatorConnect(roomId);
+  }
+
+  function attemptSpectatorConnect(roomId){
+    connectAttempt++;
     peer = new Peer({ config: ICE_CONFIG });
 
     peer.on('open', () => {
-      renderLobby('joining');
+      renderLobby(connectAttempt > 1 ? 'joining-retry' : 'joining');
       conn = peer.connect(roomId, { reliable: true, metadata: { role: 'spectator' } });
       const myConn = conn;
       setupPrimaryConnection();
-      startConnectTimeout();
+      startConnectTimeout(() => {
+        if (conn !== myConn) return;
+        if (peer) peer.destroy();
+        if (connectAttempt < 2) attemptSpectatorConnect(roomId);
+        else renderLobby('error', CONNECT_TIMEOUT_MSG);
+      });
       conn.on('open', () => {
         if (conn !== myConn) return;
         clearConnectTimeout();
@@ -1303,7 +1332,7 @@
       roleBadgeEl.textContent = 'You are Spectating';
     }
     const newGameBtn = document.getElementById('newGameBtn');
-    if (newGameBtn) newGameBtn.style.display = myPlayerNumber === 0 ? 'none' : 'block';
+    if (newGameBtn) newGameBtn.style.display = myPlayerNumber === 1 ? 'block' : 'none';
     buildReactionButtons();
   }
 
@@ -1398,6 +1427,10 @@
       lobbyEl.innerHTML = `<p class="lobby-status">Connecting to your opponent&hellip;</p>`;
       return;
     }
+    if (state === 'joining-retry'){
+      lobbyEl.innerHTML = `<p class="lobby-status">Still connecting &mdash; trying a fresh route&hellip;</p>`;
+      return;
+    }
     if (state === 'reconnecting'){
       lobbyEl.innerHTML = `<p class="lobby-status">Reconnecting to your opponent&hellip;</p>`;
       return;
@@ -1411,7 +1444,7 @@
         <p class="lobby-status error">Couldn't connect${extra ? ': ' + escapeHtml(extra) : '.'}</p>
         <button id="retryBtn" class="btn-secondary" type="button" style="margin-top:12px;">Try Again</button>
       `;
-      document.getElementById('retryBtn').addEventListener('click', () => location.href = location.pathname);
+      document.getElementById('retryBtn').addEventListener('click', () => location.reload());
       return;
     }
     if (state === 'opponent-left'){
@@ -1419,7 +1452,7 @@
         <p class="lobby-status error">Your opponent disconnected.</p>
         <button id="restartBtn" class="btn-secondary" type="button" style="margin-top:12px;">Start Over</button>
       `;
-      document.getElementById('restartBtn').addEventListener('click', () => location.href = location.pathname);
+      document.getElementById('restartBtn').addEventListener('click', () => location.reload());
       return;
     }
   }
@@ -1740,7 +1773,7 @@
   }
 
   document.getElementById('newGameBtn').addEventListener('click', () => {
-    if (myPlayerNumber === 0) return; // spectators can't restart the game
+    if (myPlayerNumber !== 1) return; // only the host can start a new game
     openPlacerChoice();
   });
   document.getElementById('placerChooseMe').addEventListener('click', () => {
