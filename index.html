@@ -303,7 +303,8 @@
     background: linear-gradient(150deg, var(--board-dark), var(--panel-border) 130%);
     box-shadow: 0 24px 46px var(--shadow), inset 0 0 0 1px rgba(0,0,0,0.28);
     max-width: calc(100vw - 40px); /* .stage has 20px horizontal padding on each side */
-    overflow-x: auto;
+    max-height: 70vh;
+    overflow: auto;
   }
   .brace{
     position:absolute;
@@ -558,36 +559,6 @@
     text-align:center;
   }
 
-  .modal-overlay{
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 10, 6, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    padding: 20px;
-  }
-  .modal-card{
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 10px;
-    padding: 26px 28px;
-    max-width: 340px;
-    width: 100%;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .modal-title{
-    margin: 0 0 6px;
-    font-size: 0.96rem;
-    font-weight: 600;
-    color: var(--ink);
-    text-align:center;
-  }
-
   .records-card{
     width: 100%;
     max-width: 760px;
@@ -724,15 +695,6 @@
         </div>
       </aside>
 
-    </div>
-  </div>
-
-  <div id="placerModal" class="modal-overlay" style="display:none;">
-    <div class="modal-card">
-      <p class="modal-title">Who places the queen this game?</p>
-      <button id="placerChooseMe" class="btn-primary" type="button"></button>
-      <button id="placerChooseOpponent" class="btn-primary" type="button"></button>
-      <button id="placerCancel" class="btn-secondary" type="button" style="width:100%;">Cancel</button>
     </div>
   </div>
 
@@ -1399,6 +1361,7 @@
             <option value="20">20 &times; 20</option>
             <option value="25">25 &times; 25</option>
             <option value="30">30 &times; 30</option>
+            <option value="100">100 &times; 100</option>
           </select>
         </div>
         ${resumeBtn}
@@ -1506,8 +1469,21 @@
     return x === N - 1 || y === N - 1;
   }
 
+  function fileLetter(x){
+    // Spreadsheet-style column naming so boards wider than 26 columns
+    // (e.g. 100x100) still get a unique file label: A..Z, AA..AZ, BA..
+    let n = x + 1;
+    let s = '';
+    while (n > 0){
+      n--;
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26);
+    }
+    return s;
+  }
+
   function toNotation(x, y){
-    return String.fromCharCode(65 + x) + (y + 1);
+    return fileLetter(x) + (y + 1);
   }
 
   function buildCoordinateLabels(){
@@ -1520,7 +1496,7 @@
         const d = document.createElement('div');
         d.className = 'coord-label';
         d.style.width = cellSize + 'px';
-        d.textContent = String.fromCharCode(65 + x);
+        d.textContent = fileLetter(x);
         fileEl.appendChild(d);
       }
     }
@@ -1787,39 +1763,15 @@
     if (broadcast) sendMsg(buildSyncPayload());
   }
 
-  function startNewGame(broadcast, chosenPlacer){
-    placingPlayer = chosenPlacer === 1 || chosenPlacer === 2
-      ? chosenPlacer
-      : (placingPlayer === 1 ? 2 : 1); // fallback: alternate if no explicit choice given
+  function startNewGame(broadcast){
+    placingPlayer = placingPlayer === 1 ? 2 : 1; // always alternate who places, every new game
     resetBoardState();
     if (broadcast) sendMsg(buildSyncPayload());
   }
 
-  function openPlacerChoice(){
-    document.getElementById('placerChooseMe').textContent = 'You place first';
-    document.getElementById('placerChooseOpponent').textContent = `${opponentName()} places first`;
-    document.getElementById('placerModal').style.display = 'flex';
-  }
-
-  function closePlacerChoice(){
-    document.getElementById('placerModal').style.display = 'none';
-  }
-
   document.getElementById('newGameBtn').addEventListener('click', () => {
     if (myPlayerNumber !== 1) return; // only the host can start a new game
-    openPlacerChoice();
-  });
-  document.getElementById('placerChooseMe').addEventListener('click', () => {
-    closePlacerChoice();
-    startNewGame(true, myPlayerNumber);
-  });
-  document.getElementById('placerChooseOpponent').addEventListener('click', () => {
-    closePlacerChoice();
-    startNewGame(true, myPlayerNumber === 1 ? 2 : 1);
-  });
-  document.getElementById('placerCancel').addEventListener('click', closePlacerChoice);
-  document.getElementById('placerModal').addEventListener('click', (e) => {
-    if (e.target.id === 'placerModal') closePlacerChoice();
+    startNewGame(true);
   });
 
   // ---------- Boot ----------
