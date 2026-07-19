@@ -796,18 +796,37 @@
   let connectAttempt = 0;
   let rejected = false; // set true if the room turned out to already be full
 
-  // Public STUN + free TURN relay (openrelay.metered.ca) so the connection
-  // can still be established when both players are behind restrictive NATs
-  // (very common on mobile carrier networks) — STUN alone often fails there.
-  const ICE_CONFIG = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:openrelay.metered.ca:80' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-    ]
-  };
+  // TURN relay so the connection can still be established when both players
+  // are behind restrictive NATs (very common on mobile carrier networks) —
+  // STUN alone often fails there. Credentials are fetched fresh from our
+  // Metered.ca account rather than hardcoded, since static shared TURN
+  // credentials tend to get discontinued without notice.
+  const TURN_CREDENTIALS_URL = 'https://corner-the-queen.metered.live/api/v1/turn/credentials?apiKey=81de411c208e4545698969cba0844c60d5db';
+  const FALLBACK_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+  let cachedIceServers = null;
+  let iceServersPromise = null;
+
+  function fetchIceServers(){
+    if (cachedIceServers) return Promise.resolve(cachedIceServers);
+    if (iceServersPromise) return iceServersPromise;
+    iceServersPromise = fetch(TURN_CREDENTIALS_URL)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('bad response')))
+      .then(servers => {
+        cachedIceServers = Array.isArray(servers) && servers.length ? servers : FALLBACK_ICE_SERVERS;
+        return cachedIceServers;
+      })
+      .catch(() => {
+        cachedIceServers = FALLBACK_ICE_SERVERS;
+        return cachedIceServers;
+      });
+    return iceServersPromise;
+  }
+
+  async function getIceConfig(){
+    const iceServers = await fetchIceServers();
+    return { iceServers };
+  }
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1202,19 +1221,21 @@
     });
   }
 
-  function initHost(){
+  async function initHost(){
     myPlayerNumber = 1;
     playerNames = { 1: myName || 'Player 1', 2: 'Player 2' };
     const roomId = ROOM_PREFIX + randomRoomSuffix(6);
     currentRoomId = roomId;
-    peer = new Peer(roomId, { config: ICE_CONFIG });
+    const config = await getIceConfig();
+    if (currentRoomId !== roomId) return; // superseded by another action while we were fetching
+    peer = new Peer(roomId, { config });
 
     peer.on('open', id => renderLobby('hosting-waiting', id));
     attachHostConnectionHandler();
     peer.on('error', err => { clearConnectTimeout(); renderLobby('error', err && err.message); });
   }
 
-  function resumeHost(saved){
+  async function resumeHost(saved){
     myPlayerNumber = 1;
     currentRoomId = saved.roomId;
     N = saved.N || 16;
@@ -1238,7 +1259,9 @@
     statusEl.classList.add('placing');
     statusEl.textContent = `Resuming your previous game — waiting for ${opponentName()} to rejoin…`;
 
-    peer = new Peer(saved.roomId, { config: ICE_CONFIG });
+    const config = await getIceConfig();
+    if (currentRoomId !== saved.roomId) return; // superseded by another action while we were fetching
+    peer = new Peer(saved.roomId, { config });
     peer.on('open', () => {});
     attachHostConnectionHandler();
     peer.on('error', err => {
@@ -1257,9 +1280,12 @@
     attemptGuestConnect(roomId);
   }
 
-  function attemptGuestConnect(roomId){
+  async function attemptGuestConnect(roomId){
     connectAttempt++;
-    peer = new Peer({ config: ICE_CONFIG });
+    const thisAttempt = connectAttempt;
+    const config = await getIceConfig();
+    if (connectAttempt !== thisAttempt || currentRoomId !== roomId) return; // superseded
+    peer = new Peer({ config });
 
     peer.on('open', () => {
       renderLobby(connectAttempt > 1 ? 'joining-retry' : 'joining');
@@ -1294,9 +1320,12 @@
     attemptSpectatorConnect(roomId);
   }
 
-  function attemptSpectatorConnect(roomId){
+  async function attemptSpectatorConnect(roomId){
     connectAttempt++;
-    peer = new Peer({ config: ICE_CONFIG });
+    const thisAttempt = connectAttempt;
+    const config = await getIceConfig();
+    if (connectAttempt !== thisAttempt || currentRoomId !== roomId) return; // superseded
+    peer = new Peer({ config });
 
     peer.on('open', () => {
       renderLobby(connectAttempt > 1 ? 'joining-retry' : 'joining');
@@ -1795,6 +1824,7 @@
 
   // ---------- Boot ----------
 
+  fetchIceServers(); // warm the cache so it's likely ready by the time the user clicks Create/Join
   loadPublicRecords();
 
   const params = new URLSearchParams(location.search);
